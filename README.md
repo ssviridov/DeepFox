@@ -1,0 +1,2 @@
+# DeepFox
+Animal-AI Olympics
