@@ -1,2 +1,2 @@
 # DeepFox
-Animal-AI Olympics
+Repo for [Animal-AI Olympics](http://animalaiolympics.com/) competition solutions.
