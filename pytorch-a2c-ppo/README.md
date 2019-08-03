@@ -3,7 +3,6 @@
 ## Run a2c, ppo, acktr on the Animal AI Olympics environment
 Algorithm expects to find environment in `aai_resources/env` directory and task configs in `aai_resources/default_configs`.
 But you can specify different paths using `--env-path` and `--config-dir`. 
-I've added new commandline arguments, you can find them in `a2c_ppo_acktr/aai_arguments.py`
 
 Train recurrent PPO for 100kk interaction steps (use `--headless` for headless mode):
 ```bash
