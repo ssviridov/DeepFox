@@ -251,7 +251,7 @@ def main():
                 for info in infos:
                     if 'episode_reward' in info.keys():
                         episode_rewards.append(info['episode_reward'])
-                        episode_success.append(info['ep_success'])
+                        episode_success.append(info['episode_success'])
                         episode_len.append(info['episode_len'])
 
                 # If done then clean the history of observations.
