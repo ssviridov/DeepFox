@@ -164,11 +164,20 @@ class VecPyTorch(VecEnvWrapper):
         super(VecPyTorch, self).__init__(venv)
         self.device = device
         # TODO: Fix data types
+        if isinstance(self.observation_space, gym.spaces.Dict):
+            self._to_torch = self._dict2th
+        else:
+            self._to_torch = self._th
+
+    def _th(self, array, dtype=torch.float32):
+        return torch.tensor(array, dtype=dtype, device=self.device)
+
+    def _dict2th(self, d):
+        return {k:self._th(v) for k,v in d.items()}
 
     def reset(self):
         obs = self.venv.reset()
-        obs = torch.from_numpy(obs).float().to(self.device)
-        return obs
+        return self._to_torch(obs)
 
     def step_async(self, actions):
         if actions.dtype == torch.long:
@@ -179,9 +188,8 @@ class VecPyTorch(VecEnvWrapper):
 
     def step_wait(self):
         obs, reward, done, info = self.venv.step_wait()
-        obs = torch.from_numpy(obs).float().to(self.device)
         reward = torch.from_numpy(reward).unsqueeze(dim=1).float()
-        return obs, reward, done, info
+        return self._to_torch(obs), reward, done, info
 
 
 class VecNormalize(VecNormalize_):
@@ -214,7 +222,7 @@ class VecPyTorchFrameStack(VecEnvWrapper):
         self.venv = venv
         self.nstack = nstack
 
-        wos = venv.observation_space  # wrapped ob space
+        wos = venv.observation_space# wrapped ob space
         self.shape_dim0 = wos.shape[0]
 
         low = np.repeat(wos.low, self.nstack, axis=0)
@@ -226,13 +234,12 @@ class VecPyTorchFrameStack(VecEnvWrapper):
                                        low.shape).to(device)
 
         observation_space = gym.spaces.Box(
-            low=low, high=high, dtype=venv.observation_space.dtype)
+            low=low, high=high, dtype=wos.dtype) #venv.observation_space.dtype)
         VecEnvWrapper.__init__(self, venv, observation_space=observation_space)
 
     def step_wait(self):
         obs, rews, news, infos = self.venv.step_wait()
-        self.stacked_obs[:, :-self.shape_dim0] = \
-            self.stacked_obs[:, self.shape_dim0:]
+        self.stacked_obs[:, :-self.shape_dim0] = self.stacked_obs[:, self.shape_dim0:]
         for (i, new) in enumerate(news):
             if new:
                 self.stacked_obs[i] = 0

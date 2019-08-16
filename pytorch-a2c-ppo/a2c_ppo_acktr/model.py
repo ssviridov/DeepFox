@@ -93,6 +93,9 @@ class NNBase(nn.Module):
                     nn.init.constant_(param, 0)
                 elif 'weight' in name:
                     nn.init.orthogonal_(param)
+        else:
+            pass #TODO: create Linear layer here
+
 
     @property
     def is_recurrent(self):
@@ -167,6 +170,7 @@ class NNBase(nn.Module):
 
 
 class CNNBase(NNBase):
+
     def __init__(self, num_inputs, recurrent=False, hidden_size=512):
         super(CNNBase, self).__init__(recurrent, hidden_size, hidden_size)
 

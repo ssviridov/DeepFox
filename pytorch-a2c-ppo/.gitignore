@@ -21,7 +21,7 @@ parts/
 sdist/
 var/
 wheels/
-pretrained/
+**/pretrained/
 aai_resources/env
 *.egg-info/
 .installed.cfg
@@ -107,3 +107,4 @@ venv.bak/
 
 trained_models/
 .fuse_hidden*
+UnitySDK.log

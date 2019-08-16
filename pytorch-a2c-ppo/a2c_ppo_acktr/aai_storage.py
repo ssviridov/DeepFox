@@ -1,16 +1,103 @@
 import torch
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
+from .storage import _flatten_helper, RolloutStorage
+from typing import List
+import gym
+
+def create_storage(
+        num_steps,
+        num_processes,
+        obs_space,
+        action_space,
+        recurrent_hidden_state_size
+):
+    if isinstance(obs_space, gym.spaces.Dict):
+        storage_cls = RolloutStorageWithDictObs
+    else:
+        storage_cls = RolloutStorage
+
+    rollouts = storage_cls(
+        num_steps, num_processes,
+        obs_space, action_space,
+        recurrent_hidden_state_size
+    )
+    return rollouts
+
+class DictAsTensor(object):
+
+    @staticmethod
+    def from_dict(dict_of_tenors):
+        return DictAsTensor(dict_of_tenors)
+
+    @staticmethod
+    def create_empty(dict_of_shapes, repeat_shape=()):
+        tensor = {}
+        for k, shape in dict_of_shapes.items():
+            tensor[k] = torch.zeros(*repeat_shape, *shape)
+        return DictAsTensor(tensor)
+
+    @staticmethod
+    def stack(list_of_dict_as_tensors, dim):
+        keys = list(list_of_dict_as_tensors[0].tensor.keys())
+        stacked = {}
+        for k in keys:
+            stacked[k] = torch.stack(
+                [dat.tensor[k] for dat in list_of_dict_as_tensors], dim=dim
+            )
+        return DictAsTensor.from_dict(stacked)
+
+    def __init__(self, dict_of_tensors):
+        """Makes a shallow copy of the dictionary of tensors"""
+        super(DictAsTensor, self).__init__()
+        self.tensor = {}
+        for k, t in dict_of_tensors.items():
+            self.tensor[k] = t
+
+    def to(self,  *args, **kwargs):
+        result = {k:t.to(*args, **kwargs) for k, t in self.tensor.items()}
+        return self.from_dict(result)
+
+    def __getitem__(self, key):
+        """
+        Returns a new DictOfTensors with results of indexing or slicing.
+        Warning: it may store just a views of the original tensors, or a full copies depending on the slicing you are using!
+        """
+        return self.from_dict({k:t[key] for k, t in self.tensor.items()})
+
+    def copy_(self, dict_of_tensors):
+        # if this is not a real dict then it is a DictAsTensor
+        if not hasattr(dict_of_tensors, "items"):
+            dict_of_tensors = dict_of_tensors.tensor
+
+        for k,t in self.tensor.items():
+            t.copy_(dict_of_tensors[k])
+
+    def flatten_view(self, n_first_dims):
+        tensor = {}
+        for k, t in self.tensor.items():
+            tensor[k] = t.view(-1, *t.shape[n_first_dims:])
+
+        return self.from_dict(tensor)
+
+    def size(self):
+        return {k:v.size() for k, v in self.tensor.items()}
+
+    def asdict(self):
+        return dict(self.tensor)
 
 
-def _flatten_helper(T, N, _tensor):
-    return _tensor.view(T * N, *_tensor.size()[2:])
+class RolloutStorageWithDictObs(object):
 
-
-class RolloutStorage(object):
     def __init__(self, num_steps, num_processes, obs_space, action_space,
                  recurrent_hidden_state_size):
+        # Be really cautions with DictAsTensor.
+        # It's only simulate behavior of the real tensors on the operations
+        # that i use here
+        obs_shapes = {k:sp.shape for k,sp in obs_space.spaces.items()}
+        self.obs = DictAsTensor.create_empty(
+            obs_shapes, repeat_shape=(num_steps+1, num_processes)
+        )
 
-        self.obs = torch.zeros(num_steps + 1, num_processes, *obs_space.shape)
         self.recurrent_hidden_states = torch.zeros(
             num_steps + 1, num_processes, recurrent_hidden_state_size)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
@@ -125,7 +212,11 @@ class RolloutStorage(object):
             mini_batch_size,
             drop_last=True)
         for indices in sampler:
-            obs_batch = self.obs[:-1].view(-1, *self.obs.size()[2:])[indices]
+            obs_batch = self.obs[:-1].flatten_view(n_first_dims=2)
+            obs_batch = obs_batch[indices]
+            obs_batch = obs_batch.asdict()
+            #obs_batch = self.obs[:-1].view(-1, *self.obs.size()[2:])[indices]
+
             recurrent_hidden_states_batch = self.recurrent_hidden_states[:-1].view(
                 -1, self.recurrent_hidden_states.size(-1))[indices]
             actions_batch = self.actions.view(-1,
@@ -164,6 +255,7 @@ class RolloutStorage(object):
             for offset in range(num_envs_per_batch):
                 ind = perm[start_ind + offset]
                 obs_batch.append(self.obs[:-1, ind])
+
                 recurrent_hidden_states_batch.append(
                     self.recurrent_hidden_states[0:1, ind])
                 actions_batch.append(self.actions[:, ind])
@@ -176,7 +268,8 @@ class RolloutStorage(object):
 
             T, N = self.num_steps, num_envs_per_batch
             # These are all tensors of size (T, N, -1)
-            obs_batch = torch.stack(obs_batch, 1)
+            obs_batch = DictAsTensor.stack(obs_batch, 1)
+
             actions_batch = torch.stack(actions_batch, 1)
             value_preds_batch = torch.stack(value_preds_batch, 1)
             return_batch = torch.stack(return_batch, 1)
@@ -190,7 +283,10 @@ class RolloutStorage(object):
                 recurrent_hidden_states_batch, 1).view(N, -1)
 
             # Flatten the (T, N, ...) tensors to (T * N, ...)
-            obs_batch = _flatten_helper(T, N, obs_batch)
+            obs_batch = obs_batch.flatten_view(n_first_dims=2)
+            obs_batch = obs_batch.asdict()
+            # obs_batch = _flatten_helper(T, N, obs_batch)
+
             actions_batch = _flatten_helper(T, N, actions_batch)
             value_preds_batch = _flatten_helper(T, N, value_preds_batch)
             return_batch = _flatten_helper(T, N, return_batch)
@@ -201,3 +297,35 @@ class RolloutStorage(object):
 
             yield obs_batch, recurrent_hidden_states_batch, actions_batch, \
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
+
+# rollouts.obs[0].copy_(obs)
+# rollouts.to(device)
+
+# rollouts.obs[step],
+# rollouts.recurrent_hidden_states[step],
+# rollouts.masks[step]
+
+# rollouts.insert
+
+# rollouts.obs[-1],
+# rollouts.recurrent_hidden_states[-1],
+# rollouts.masks[-1]
+
+#rollouts.compute_returns(
+#   next_value, args.use_gae, args.gamma,
+#    args.gae_lambda,
+#    args.use_proper_time_limits
+#)
+
+# ==== PPO UPDATE ========:
+# rollouts.returns[:-1] - rollouts.value_preds[:-1]
+# rollouts.recurrent_generator(
+# rollouts.feed_forward_generator(
+#=========================
+
+# ==== A2C UPDATE ========:
+#  rollouts.obs.size()[2:]
+#  rollouts.obs[:-1].view(-1, *obs_shape)
+#=========================
+
+#rollouts.after_update()

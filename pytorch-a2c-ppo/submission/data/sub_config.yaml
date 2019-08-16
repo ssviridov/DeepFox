@@ -1,0 +1,16 @@
+
+model_path: "/aaio/data/pretrained/ppo_ff_default_configs.pt"
+#if you are running agent.py as a module from pytorch-a2c-ppo
+#directory then use an appropriate path:
+#model_path: "pretrained/a2c_models/19_08_04.pt"
+
+device: "cuda"
+greedy_policy: False
+
+action_adapter:
+  unflatten: True #discrete(9) or whatever to discrete(3,3)
+
+observation_adapter:
+    image_only: True
+    transpose: True
+    unsqueeze: True

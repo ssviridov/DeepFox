@@ -31,12 +31,17 @@ class A2C_ACKTR():
                 actor_critic.parameters(), lr, eps=eps, alpha=alpha)
 
     def update(self, rollouts):
-        obs_shape = rollouts.obs.size()[2:]
+        if hasattr(rollouts.obs, "flatten_view"):
+            obs_flatten = rollouts.obs[:-1].flatten_view(n_first_dims=2).asdict()
+        else:
+            obs_shape = rollouts.obs.size()[2:]
+            obs_flatten = rollouts.obs[:-1].view(-1, *obs_shape)
+
         action_shape = rollouts.actions.size()[-1]
         num_steps, num_processes, _ = rollouts.rewards.size()
 
         values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
-            rollouts.obs[:-1].view(-1, *obs_shape),
+            obs_flatten, #rollouts.obs[:-1].view(-1, *obs_shape),
             rollouts.recurrent_hidden_states[0].view(
                 -1, self.actor_critic.recurrent_hidden_state_size),
             rollouts.masks[:-1].view(-1, 1),

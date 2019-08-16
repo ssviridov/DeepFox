@@ -20,25 +20,14 @@ def get_args():
         default=False,
         help='Use headless mod to train UnityEnvironment on server'
     )
+    parser.add_argument(
+        '--extra-obs', type=str, nargs='*', default=tuple(),
+        help="A list of additional observations for agents to receive. "
+             "Possible choices are: pos, speed, angle"
+    )
     #PPO/A2C arguments:
     parser.add_argument(
         '--algo', default='a2c', help='algorithm to use: a2c | ppo | acktr')
-    parser.add_argument(
-        '--gail',
-        action='store_true',
-        default=False,
-        help='do imitation learning with gail')
-    parser.add_argument(
-        '--gail-experts-dir',
-        default='./gail_experts',
-        help='directory that contains expert demonstrations for gail')
-    parser.add_argument(
-        '--gail-batch-size',
-        type=int,
-        default=128,
-        help='gail batch size (default: 128)')
-    parser.add_argument(
-        '--gail-epoch', type=int, default=5, help='gail epochs (default: 5)')
     parser.add_argument(
         '--lr', type=float, default=7e-4, help='learning rate (default: 7e-4)')
     parser.add_argument(
@@ -82,7 +71,7 @@ def get_args():
         default=0.5,
         help='max norm of gradients (default: 0.5)')
     parser.add_argument(
-        '--seed', type=int, default=1, help='random seed (default: 1)')
+        '--seed', type=int, default=None, help='random seed (default: 1)')
     parser.add_argument(
         '--cuda-deterministic',
         action='store_true',

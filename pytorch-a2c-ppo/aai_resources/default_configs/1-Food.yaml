@@ -5,6 +5,7 @@ arenas:
     items:
     - !Item
       name: GoodGoal
+
   1: !Arena
     t: 250
     items:
