@@ -22,9 +22,12 @@ from evaluate_aai import evaluate
 from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
 from datetime import datetime
 import json
+from tensorboardX import SummaryWriter
 
-def curr_day():
-    return datetime.now().strftime("%y_%m_%d")
+
+#def curr_day():
+#    return datetime.now().strftime("%y_%m_%d")
+
 
 def ensure_dir(file_path):
     """
@@ -34,6 +37,7 @@ def ensure_dir(file_path):
     directory = os.path.dirname(file_path)
     if not os.path.exists(directory):
         os.makedirs(directory)
+
 
 class DummySaver(object):
 
@@ -83,11 +87,48 @@ class DummySaver(object):
         return status
 
 
+def log_progress(summary,
+        curr_update, curr_step, ep_rewards, ep_success, ep_len,
+        dist_entropy, value_loss, action_loss,
+        fps, loop_fps,
+):
+    mean_r = np.mean(ep_rewards)
+    median_r = np.median(ep_rewards)
+    min_r = np.min(ep_rewards)
+    max_r = np.max(ep_rewards)
+    mean_success = np.mean(ep_success)
+    mean_eplen = np.mean(ep_len)
+    print(
+        "Updates {}, num_steps {}, FPS/Loop FPS {}/{} \n"
+        "Last {} episodes:\n  mean/median R {:.2f}/{:.2f}, min/max R {:.1f}/{:.1f}\n"
+        "  mean success {:.2f},  mean length {:.1f}\n".format(
+            curr_update, curr_step, fps, loop_fps,
+            len(ep_rewards), mean_r, median_r,
+            min_r, max_r, mean_success, mean_eplen
+        )
+    )
+
+    if summary is None: return
+    summary.add_scalars(
+        "Env/reward", {"mean":mean_r, "median":median_r},
+        curr_step,
+    )
+    summary.add_scalar("Env/success", mean_success, curr_step)
+    summary.add_scalar("Env/episode_length", mean_eplen, curr_step)
+
+    summary.add_scalar('Loss/enropy', dist_entropy, curr_step)
+    summary.add_scalar('Loss/critic', value_loss, curr_step)
+    summary.add_scalar('Loss/actor', action_loss, curr_step)
+
+    summary.add_scalars("Performance/FPS", {"total":fps, "loop":loop_fps}, curr_step)
+
+
 def main():
     args = get_args()
     if args.seed is None:
         args.seed = np.random.randint(1000)
-    args.total_updates = int(args.num_env_steps) // args.num_steps // args.num_processes
+    steps_per_update = args.num_steps*args.num_processes
+    args.total_updates = int(args.num_env_steps) // steps_per_update
 
     print("env_path:", args.env_path)
     print("config_dir:", args.config_dir)
@@ -113,7 +154,8 @@ def main():
 
     #gen_config = ListSampler.create_from_dir(args.config_dir)
     gen_config = SingleConfigGenerator.from_file(
-        "aai_resources/test_configs/MySample2.yaml"
+        #"aai_resources/test_configs/MySample2.yaml"
+        "aai_resources/default_configs/1-Food.yaml"
     )
     test_gen_config = copy.deepcopy(gen_config)
 
@@ -180,89 +222,88 @@ def main():
     episode_success = deque(maxlen=100)
     episode_len = deque(maxlen=100)
 
-    start = time.time()
+    start_time = time.time()
     model_saver = DummySaver(args)
+    summary = SummaryWriter(os.path.join(model_saver.save_subdir, 'summary'))
+    try:
+        for curr_update in range(args.total_updates):
+            loop_start_time = time.time()
+            if args.use_linear_lr_decay:
+                # decrease learning rate linearly
+                utils.update_linear_schedule(
+                    agent.optimizer, curr_update, args.total_updates,
+                    agent.optimizer.lr if args.algo == "acktr" else args.lr)
 
-    for curr_update in range(args.total_updates):
+            for step in range(args.num_steps):
+                # Sample actions
+                with torch.no_grad():
 
-        if args.use_linear_lr_decay:
-            # decrease learning rate linearly
-            utils.update_linear_schedule(
-                agent.optimizer, curr_update, args.total_updates,
-                agent.optimizer.lr if args.algo == "acktr" else args.lr)
+                    assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!'
 
-        for step in range(args.num_steps):
-            # Sample actions
+                    value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
+                        obs, #rollouts.obs[step],
+                        rollouts.recurrent_hidden_states[step],
+                        rollouts.masks[step])
+
+                # Obser reward and next obs
+                obs, reward, done, infos = envs.step(action)
+
+                for info in infos:
+                    if 'episode_reward' in info.keys():
+                        episode_rewards.append(info['episode_reward'])
+                        episode_success.append(info['ep_success'])
+                        episode_len.append(info['episode_len'])
+
+                # If done then clean the history of observations.
+                masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done])
+                bad_masks = torch.tensor(
+                    [[0.0] if 'bad_transition' in info.keys() else [1.0]
+                     for info in infos]
+                )
+
+                rollouts.insert(obs, recurrent_hidden_states, action,
+                                action_log_prob, value, reward, masks, bad_masks)
+
             with torch.no_grad():
-
-                assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!'
-
-                value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                    obs, #rollouts.obs[step],
-                    rollouts.recurrent_hidden_states[step],
-                    rollouts.masks[step])
-
-            # Obser reward and next obs
-            obs, reward, done, infos = envs.step(action)
-
-            for info in infos:
-                if 'episode_reward' in info.keys():
-                    episode_rewards.append(info['episode_reward'])
-                    episode_success.append(info['episode_success'])
-                    episode_len.append(info['episode_len'])
-
-            # If done then clean the history of observations.
-            masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done])
-            bad_masks = torch.tensor(
-                [[0.0] if 'bad_transition' in info.keys() else [1.0]
-                 for info in infos]
-            )
-
-            rollouts.insert(obs, recurrent_hidden_states, action,
-                            action_log_prob, value, reward, masks, bad_masks)
-
-        with torch.no_grad():
-            assert torch.equal(obs['image'], rollouts.obs[-1].asdict()['image']), 'woy!! this is strange!'
-            next_value = actor_critic.get_value(
-                obs, #rollouts.obs[-1],
-                rollouts.recurrent_hidden_states[-1],
-                rollouts.masks[-1]).detach()
+                assert torch.equal(obs['image'], rollouts.obs[-1].asdict()['image']), 'woy!! this is strange!'
+                next_value = actor_critic.get_value(
+                    obs, #rollouts.obs[-1],
+                    rollouts.recurrent_hidden_states[-1],
+                    rollouts.masks[-1]).detach()
 
 
-        rollouts.compute_returns(next_value, args.use_gae, args.gamma,
-                                 args.gae_lambda, args.use_proper_time_limits)
+            rollouts.compute_returns(next_value, args.use_gae, args.gamma,
+                                     args.gae_lambda, args.use_proper_time_limits)
 
-        value_loss, action_loss, dist_entropy = agent.update(rollouts)
+            value_loss, action_loss, dist_entropy = agent.update(rollouts)
 
-        rollouts.after_update()
+            rollouts.after_update()
 
+            curr_steps = (curr_update + 1) * args.num_processes * args.num_steps
 
-        total_num_steps = (curr_update + 1) * args.num_processes * args.num_steps
-        # save for every interval-th episode or for the last epoch
-        if len(episode_rewards):
-            model_saver.save_model(
-                curr_update, total_num_steps,
-                np.mean(episode_rewards), actor_critic
-            )
+            if curr_update % args.log_interval == 0 and len(episode_rewards):
+                log_progress(
+                    summary,curr_update, curr_steps,
+                    episode_rewards, episode_success, episode_len,
+                    dist_entropy, value_loss, action_loss,
+                    fps=int(curr_steps/(time.time()-start_time)),
+                    loop_fps=int(steps_per_update/(time.time()-loop_start_time))
+                )
 
-        if curr_update % args.log_interval == 0 and len(episode_rewards) > 1:
-            end = time.time()
-            print(
-                "Updates {}, num_steps {}, FPS {} \n"
-                "Last {} episodes:\n  mean/median R {:.2f}/{:.2f}, min/max R {:.1f}/{:.1f}\n"
-                "  mean success {:.2f},  mean length {:.1f}\n"
-                .format(curr_update, total_num_steps,
-                        int(total_num_steps / (end - start)),
-                        len(episode_rewards), np.mean(episode_rewards),
-                        np.median(episode_rewards), np.min(episode_rewards),
-                        np.max(episode_rewards), np.mean(episode_success),
-                        np.mean(episode_len),
-                        dist_entropy, value_loss, action_loss))
+                # save for every interval-th episode or for the last epoch
+            if len(episode_rewards):
+                model_saver.save_model(
+                    curr_update, curr_steps,
+                    np.mean(episode_rewards), actor_critic
+                )
 
-        if (args.eval_interval is not None and len(episode_rewards) > 1
-                and curr_update % args.eval_interval == 0):
-            evaluate(actor_critic, args.env_path, test_gen_config, args.seed,
-                     args.num_processes, eval_log_dir, device, args.headless)
+            if (args.eval_interval is not None and len(episode_rewards) > 1
+                    and curr_update % args.eval_interval == 0):
+                evaluate(actor_critic, args.env_path, test_gen_config, args.seed,
+                         args.num_processes, eval_log_dir, device, args.headless)
+    finally:
+        if summary: summary.close()
+        envs.close()
 
 
 if __name__ == "__main__":

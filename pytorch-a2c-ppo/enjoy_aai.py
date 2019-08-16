@@ -3,6 +3,7 @@ import os
 # workaround to unpickle olf model files
 import sys
 import time
+import json
 
 from itertools import count
 import numpy as np
@@ -15,6 +16,13 @@ from a2c_ppo_acktr.utils import get_render_func, get_vec_normalize
 
 sys.path.append('a2c_ppo_acktr')
 
+def load_args(folder, file_name='train_args.json'):
+    file_path = os.path.join(folder, file_name)
+    if os.path.isfile(file_path):
+        with open(file_path, 'r') as f:
+            return json.load(f)
+    else:
+        return None
 
 def get_config_name(venv_aai):
     return env.venv.envs[0].unwrapped.config_name
@@ -60,11 +68,16 @@ args = parser.parse_args()
 if args.seed is None:
     args.seed = np.random.randint(1000)
 
-
-
 device = torch.device("cuda:0" if args.cuda else "cpu")
 #gen_config = ListSampler.create_from_dir(args.config_dir)
 gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/1-Food.yaml")
+
+train_args = load_args(os.path.dirname(args.model_path))
+
+if(train_args):
+    image_only = len(train_args.get('extra_obs',[])) == 0
+else:
+    image_only = True
 
 env = make_vec_envs_aai(
     args.env_path,
@@ -75,7 +88,7 @@ env = make_vec_envs_aai(
     device,
     allow_early_resets=False,
     headless=False,
-    image_only=False,
+    image_only= image_only
 )
 
 # We need to use the same statistics for normalization as used in training
@@ -95,7 +108,7 @@ for episode in range(args.num_episodes):
     masks = torch.zeros(1, 1).to(device)
     obs = env.reset()
 
-    print("\nEpisode#{}".format(episode+1))
+    print("Episode#{}".format(episode+1))
 
     curr_config = get_config_name(env)
     configs2episodes.setdefault(curr_config, [])
@@ -118,7 +131,7 @@ for episode in range(args.num_episodes):
     episode_rewards.append(total_r)
     configs2episodes[curr_config].append(total_r)
     episode_steps.append(t)
-    print('total_r={:0.2f}, num_steps={}'.format(total_r, t))
+    print('total_r={:0.2f}, num_steps={}\n'.format(total_r, t))
 
 print('Played {} episodes total:'.format(args.num_episodes))
 print('Mean R: {:0.2f}'.format(np.mean(episode_rewards)))

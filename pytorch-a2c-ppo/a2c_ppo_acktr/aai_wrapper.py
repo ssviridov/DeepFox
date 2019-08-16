@@ -117,7 +117,7 @@ class AnimalAIWrapper(gym.Env):
         if done:
             return {
                 "episode_reward": float(self.ep_reward),
-                'episode_success': r > 0.4,
+                'ep_success': r > 0.4,
                 'episode_len': int(self.t),
             } #, "config":self.config}
         else:
