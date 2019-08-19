@@ -343,8 +343,8 @@ class VecPyTorchFrameStackDictObs(VecEnvWrapper):
             self.stacked_obs = torch.zeros(self.stacked_obs.shape)
         else:
             self.stacked_obs.zero_()
-        self.stacked_obs[:, -self.shape_dim0:] = obs["images"]
-        obs["images"] = self.stacked_obs
+        self.stacked_obs[:, -self.shape_dim0:] = obs["image"]
+        obs["image"] = self.stacked_obs
         return obs
 
     def close(self):
