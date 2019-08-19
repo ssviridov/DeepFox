@@ -42,7 +42,7 @@ class ObservationAdapter(object):
     def __init__(
             self,
             device,
-            nstack=2,
+            frame_stack=1,
             image_only=True,
             transpose=True,
             unsqueeze=True
@@ -51,13 +51,15 @@ class ObservationAdapter(object):
         self.image_only = image_only
         self.transpose = transpose
         self.unsqueeze = unsqueeze
-        self.nstack = nstack
+        self.nstack = frame_stack
         self.stacked_obs = defaultdict(lambda :deque(maxlen=nstack))
 
     def reset(self):
         self.stacked_obs.clear()
+        self.angle = np.zeros((1,), dtype=np.float32)
+        self.pos = np.zeros((3,), dtype=np.float32)
 
-    def __call__(self, obs):
+    def __call__(self, obs, r, done, info, prev_action):
         if isinstance(obs, tuple):
             if self.image_only:
                 return self.to_torch(0, obs[0], True)
@@ -77,6 +79,8 @@ class ObservationAdapter(object):
             }
 
     def stack_vars(self, key, var):
+        if self.nstack == 1: return var
+
         self.stacked_obs[key].append(var)
         while len(self.stacked_obs[key]) < self.nstack:
             self.stacked_obs[key].append(var)
@@ -97,6 +101,50 @@ class ObservationAdapter(object):
                 var.unsqueeze_(1)
 
         return self.stack_vars(key, var)
+
+
+class ExtraObsAdapter(ObservationAdapter):
+
+    def _rotate_XZ(self, vec, angle):
+        """rotates a vector on a given angle"""
+        betta = np.radians(angle)
+        x, y, z = vec
+        x1 = np.cos(betta) * x - np.sin(betta) * z
+        z1 = np.sin(betta) * x + np.cos(betta) * z
+        return np.array([x1, y, z1])
+
+    def reset(self):
+        super(ExtraObsAdapter, self).reset()
+        self.angle = np.zeros((1,), dtype=np.float32)
+        self.pos = np.zeros((3,), dtype=np.float32)
+
+    def _update_angle(self, action):
+        if (action - 1) % 3 == 0: #TURN_RIGHT:
+            self.angle[0] -= 6
+        if (action - 2) % 3 == 0: #TURN_LEFT
+            self.angle[0] += 6
+        self.angle[0] = self.angle[0] % 360
+
+    def __call__(self,  obs, r, done, info, prev_action):
+        self._update_angle(prev_action)
+        img = info['brain_info'].visual_observations[0][0]
+        speed = info['brain_info'].vector_observations[0]
+        absolute_speed = self._rotate_XZ(speed, self.angle[0])
+        self.pos[:] += absolute_speed
+        obs = {
+            "image": img,
+            "speed": absolute_speed / 10.,  # (-21.,21.)/10. --> (-2.1,2.1)
+            "angle": self.angle / 180 - 1.,  # (0., 360.)/180 -1. --> (-1.,1.)
+            "pos": self.pos / 70.  # (-700.,700.)/70. --> (-10.,10)
+        }
+        return super(ExtraObsAdapter, self).__call__(obs, r, done, info, prev_action)
+
+
+def make_obs_adapter(**kwargs):
+    if kwargs.get('image_only', True):
+        return ObservationAdapter(**kwargs)
+    else:
+        return ExtraObsAdapter(**kwargs)
 
 
 class Agent(object):
@@ -128,12 +176,13 @@ class Agent(object):
         self.masks = None
         self.episode_is_running = False
         self.adapt_act = None
+        self.prev_action = 0
 
         self.adapt_act = ActionAdapter(
             **self.config.get('action_adapter', {})
         )
-        self.adapt_obs = ObservationAdapter(
-            self.device,
+        self.adapt_obs = make_obs_adapter(
+            device=self.device,
             **self.config.get("observation_adapter",{})
         )
 
@@ -156,7 +205,7 @@ class Agent(object):
         self.masks = None
         self.adapt_obs.reset()
         self.adapt_act.reset()
-
+        self.prev_action = 0
 
     def _start_episode(self, batch_size=1):
 
@@ -167,6 +216,7 @@ class Agent(object):
         )
         self.masks = th.zeros(batch_size,1, device=self.device)
         self.episode_is_running = True
+        self.prev_action = 0
 
     def step(self, obs, reward, done, info):
         """
@@ -180,7 +230,7 @@ class Agent(object):
                 self.batch_size = self._get_batch_size(reward)
                 self._start_episode(self.batch_size)
 
-            obs = self.adapt_obs(obs)
+            obs = self.adapt_obs(obs, reward, done, info, self.prev_action)
 
             _, action, _, self.rnn_state = self.model.act(
                 obs, self.rnn_state,
@@ -191,6 +241,8 @@ class Agent(object):
                 action = action.squeeze()
 
             action = action.tolist()
+            self.prev_action = action
+
             action = self.adapt_act(action)
 
             if done:
@@ -203,58 +255,3 @@ class Agent(object):
             return 1
         else:
             return len(var)
-
-
-def create_env(seed=None):
-
-    arena_config = ArenaConfig(
-        "aai_resources/default_configs/1-Food.yaml"
-    )
-
-    seed = seed if seed else rnd.randint(0, 1000)
-    env = AnimalAIEnv(
-        environment_filename="aai_resources/env/AnimalAI",
-        worker_id=seed,
-        n_arenas=1,
-        arenas_configurations=arena_config,
-        docker_training=False,
-        retro=False
-    )
-    return env
-
-
-if __name__ == "__main__":
-    import random as rnd
-    import itertools as it
-
-    agent = Agent('submission/data/sub_config.yaml')
-    env = create_env()
-
-    obs = env.reset()
-
-
-    print('Running 5 episodes')
-    for k in range(5):
-        cumulated_reward = 0
-        print('Episode {} starting'.format(k))
-        try:
-            agent.reset()
-            #obs: tuple(84,84,3),(3,), reward: int, done: bool, info: dict{"brain_info":..., ..}
-            obs, reward, done, info = env.step([0, 0])
-
-            for step in it.count(1):
-                action = agent.step(obs, reward, done, info)
-                obs, reward, done, info = env.step(action)
-                cumulated_reward += reward
-                if done:
-                    break
-        except Exception as e:
-            print('Episode {} failed'.format(k))
-            raise e
-
-        print(
-            'Episode {0} completed, reward {1:0.2f}, num_steps {2}'.format(
-                k, cumulated_reward, step
-            ))
-
-    print('SUCCESS')

@@ -100,7 +100,7 @@ class AnimalAIWrapper(gym.Env):
         return obs, r, done
 
     def _make_obs(self, state):
-        img = state['Learner'].visual_observations[0][0]
+        img = state['Learner'].visual_observations[0][0]*255.
         if self.channel_first: #C,H,W format for pytorch conv layers
             img = img.transpose(2, 0, 1)
         if self.image_only: return img
@@ -109,7 +109,7 @@ class AnimalAIWrapper(gym.Env):
         absolute_speed = rotate(speed, self.angle[0])
         self.pos[:] += absolute_speed
         return {
-            "image":img * 255.,
+            "image":img,
             "speed":absolute_speed /10., #(-21.,21.)/10. --> (-2.1,2.1)
             "angle":self.angle/180 -1., #(0., 360.)/180 -1. --> (-1.,1.)
             "pos":self.pos/70. #(-700.,700.)/70. --> (-10.,10)
@@ -176,6 +176,72 @@ class AnimalAIWrapper(gym.Env):
         self.env.close()
 
 
+class GridBasedExploration(gym.Wrapper):
+
+    def __init__(
+        self, env,
+        visiting_r=1./100.,
+        grid_size=(31,5,31), # we start at the center of X, and Z, dimensions and at the bottom of Y
+        cell_size=(1.,1./2, 1.),
+        observe_map=False,
+        trace_decay=1.,  # this means no decay!
+        revisit_threshold = 0.01
+    ):
+        assert isinstance(env.observation_space, space.Dict), "This wrapper use obs['pos']!"
+        super(GridBasedExploration, self).__init__(env)
+        self.grid_size=np.array(grid_size)
+        self.cell_size=np.array(cell_size)
+        self.visiting_r = visiting_r
+        self.observe_map = observe_map
+        self._visited = np.zeros(grid_size, dtype=np.float32)
+        self.revisit_threshold = revisit_threshold
+        self.total_expl_r = 0.
+
+    def set_start_coords(self):
+        self.start_x = grid_size[0] // 2
+        self.start_y = 0 # Y is a vertical dimension but we start slightly bellow the ground somehow
+        self.start_z = grid_size[2] // 2
+
+    def reset(self, **kwargs):
+        self._visited[:] = 0
+        self.set_start_coords()
+        self._visited[x,y,z] = 1.
+        obs = self.env.reset(**kwargs)
+        return self._observation(obs)
+
+    def _observation(self):
+        if self.observe_map:
+            obs['visited'] = self._visited.copy()
+        return obs
+
+    def step(self, action):
+        obs, r, done, info = self.env.step(action)
+        if self.trace_decay<1.:
+            self.map *= self.trace_decay
+        cell_pos = obs['pos']/self.cell_size
+        x, y, z = np.round(cell_pos).astype(np.int32)
+        r = self.visit(x,y,z)
+        obs = self._observation(obs)
+        self._fill_info(obs, r, done, info)
+
+        return obs, r, done, info
+
+    def _fill_info(self, obs, r, done, info):
+        self.total_expl_r += r
+        if self.visiting_r > 0.:
+            info['expl_r'] = r
+            if done:
+                info['episode_expl_r'] = self.total_expl_r
+
+    def visit(self, x,y,z):
+        _x += self.start_x
+        _y += self.start_y
+        _z += self.start_z
+        r = self.visiting_r if self._visited[_x,_y,_z] < self.revisit_threshold else 0.
+        self._map[_x,_y,_z] = 1.
+        return r
+
+
 def make_env_aai(env_path, config_generator, rank, log_dir, allow_early_resets, headless=False, **kwargs):
     if env_path is None:
         env_path = 'aai_resources/env/AnimalAI.x86_64'
@@ -183,7 +249,6 @@ def make_env_aai(env_path, config_generator, rank, log_dir, allow_early_resets, 
         env = AnimalAIWrapper(env_path, rank, config_generator, headless=headless, **kwargs)
         #if log_dir is not None:
         #    env = bench.Monitor(env, os.path.join(log_dir, str(rank)), allow_early_resets=allow_early_resets)
-
         # env = TransposeImage(env, op=[2, 0, 1])
         return env
 
@@ -210,7 +275,7 @@ def make_vec_envs_aai(env_path, config_generator, seed, num_processes, log_dir, 
     else:
         envs = DummyVecEnv(envs)
 
-    obs = envs.reset()
+    #obs = envs.reset()
     envs = VecPyTorch(envs, device)
 
     if num_frame_stack is not None:
@@ -218,5 +283,5 @@ def make_vec_envs_aai(env_path, config_generator, seed, num_processes, log_dir, 
     elif isinstance(envs.observation_space, gym.spaces.Box):
         envs = VecPyTorchFrameStack(envs, 2, device)
 
-    obs = envs.reset()
+    #obs = envs.reset()
     return envs
