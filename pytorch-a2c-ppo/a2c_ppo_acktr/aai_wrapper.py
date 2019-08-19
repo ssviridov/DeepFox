@@ -279,7 +279,7 @@ def make_vec_envs_aai(env_path, config_generator, seed, num_processes, log_dir, 
     envs = VecPyTorch(envs, device)
 
     if num_frame_stack is not None:
-        envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
+        envs = VecPyTorchFrameStackDictObs(envs, num_frame_stack, device)
     elif isinstance(envs.observation_space, gym.spaces.Box):
         envs = VecPyTorchFrameStack(envs, 2, device)
 

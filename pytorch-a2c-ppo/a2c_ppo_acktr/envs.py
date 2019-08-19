@@ -257,3 +257,95 @@ class VecPyTorchFrameStack(VecEnvWrapper):
 
     def close(self):
         self.venv.close()
+
+
+class VecPyTorchFrameStackDictObs(VecEnvWrapper):
+
+    def __init__(self, venv, nstack, device=None):
+        self.venv = venv
+        self.nstack = nstack
+
+        wos = venv.observation_space["image"]
+        self.shape_dim0 = wos.shape[0]
+
+        low = np.repeat(wos.low, self.nstack, axis=0)
+        high = np.repeat(wos.high, self.nstack, axis=0)
+
+        if device is None:
+            device = torch.device('cpu')
+        self.stacked_obs = torch.zeros((venv.num_envs, ) +
+                                       low.shape).to(device)
+
+        wos.observation_space.spaces["image"] = gym.spaces.Box(low=low, high=high, dtype=wos.dtype)
+
+        VecEnvWrapper.__init__(self, venv, observation_space=wos.observation_space)
+
+    def step_wait(self):
+        obs, rews, news, infos = self.venv.step_wait()
+        self.stacked_obs[:, :-self.shape_dim0] = self.stacked_obs[:, self.shape_dim0:]
+        for (i, new) in enumerate(news):
+            if new:
+                self.stacked_obs[i] = 0
+        self.stacked_obs[:, -self.shape_dim0:] = obs["image"]
+        obs["image"] = self.stacked_obs
+        return obs, rews, news, infos
+
+    def reset(self):
+        obs = self.venv.reset()
+        if torch.backends.cudnn.deterministic:
+            self.stacked_obs = torch.zeros(self.stacked_obs.shape)
+        else:
+            self.stacked_obs.zero_()
+        self.stacked_obs[:, -self.shape_dim0:] = obs["images"]
+        obs["images"] = self.stacked_obs
+        return obs
+
+    def close(self):
+        self.venv.close()
+
+
+class VecPyTorchFrameStackDictObs(VecEnvWrapper):
+
+    def __init__(self, venv, nstack, device=None):
+        self.venv = venv
+        self.nstack = nstack
+
+        wos = venv.observation_space["image"]
+        self.shape_dim0 = wos.shape[0]
+
+        low = np.repeat(wos.low, self.nstack, axis=0)
+        high = np.repeat(wos.high, self.nstack, axis=0)
+
+        if device is None:
+            device = torch.device('cpu')
+        self.stacked_obs = torch.zeros((venv.num_envs,) +
+                                       low.shape).to(device)
+
+        observation_space = venv.observation_space.spaces.copy()
+
+        observation_space["image"] = gym.spaces.Box(low=low, high=high, dtype=wos.dtype)
+
+        VecEnvWrapper.__init__(self, venv, observation_space=gym.spaces.Dict(observation_space))
+
+    def step_wait(self):
+        obs, rews, news, infos = self.venv.step_wait()
+        self.stacked_obs[:, :-self.shape_dim0] = self.stacked_obs[:, self.shape_dim0:]
+        for (i, new) in enumerate(news):
+            if new:
+                self.stacked_obs[i] = 0
+        self.stacked_obs[:, -self.shape_dim0:] = obs["image"]
+        obs["image"] = self.stacked_obs
+        return obs, rews, news, infos
+
+    def reset(self):
+        obs = self.venv.reset()
+        if torch.backends.cudnn.deterministic:
+            self.stacked_obs = torch.zeros(self.stacked_obs.shape)
+        else:
+            self.stacked_obs.zero_()
+        self.stacked_obs[:, -self.shape_dim0:] = obs["images"]
+        obs["images"] = self.stacked_obs
+        return obs
+
+    def close(self):
+        self.venv.close()
