@@ -14,7 +14,7 @@ from baselines import bench
 from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 
-from a2c_ppo_acktr.envs import TransposeImage, VecPyTorch, VecPyTorchFrameStack, ShmemVecEnv
+from a2c_ppo_acktr.envs import TransposeImage, VecPyTorch, VecPyTorchFrameStack, VecPyTorchFrameStackDictObs, ShmemVecEnv
 from .aai_config_generator import SingleConfigGenerator
 
 from .aai_env_fixed import UnityEnvHeadless
