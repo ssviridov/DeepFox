@@ -232,7 +232,7 @@ def main():
 
     start_time = time.time()
     model_saver = DummySaver(args)
-    summary = None # SummaryWriter(os.path.join(model_saver.save_subdir, 'summary'))
+    summary = SummaryWriter(os.path.join(model_saver.save_subdir, 'summary'))
     try:
         for curr_update in range(args.total_updates):
             loop_start_time = time.time()
@@ -309,6 +309,7 @@ def main():
                     and curr_update % args.eval_interval == 0):
                 evaluate(actor_critic, args.env_path, test_gen_config, args.seed,
                          args.num_processes, eval_log_dir, device, args.headless)
+
     finally:
         if summary: summary.close()
         envs.close()

@@ -25,10 +25,10 @@ def load_args(folder, file_name='train_args.json'):
         return None
 
 def get_config_name(venv_aai):
-    name = env.venv.envs[0].unwrapped.config_name
+    name = env.venv.envs[0].unwrapped.config_name[:-5]#no .yaml suffix
     if name[-1].isdigit():
-        return name[:-6] #different instances of one env type have a digit at the end
-    return name[:-5] #no .yaml suffix
+        return name[:-1] #different instances of one env type have a digit at the end
+    return name
 
 parser = argparse.ArgumentParser(description='RL')
 
