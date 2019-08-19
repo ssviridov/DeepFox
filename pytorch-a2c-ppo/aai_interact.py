@@ -8,8 +8,8 @@ from a2c_ppo_acktr.aai_wrapper import AnimalAIWrapper
 from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator
 
 aai_path = "aai_resources/env/AnimalAI"
-aai_config_dir = "aai_resources/test_configs/"
-curr_config = aai_config_dir + "MySample.yaml"
+aai_config_dir = "aai_resources/default_configs/"#"aai_resources/test_configs/"
+curr_config = aai_config_dir + "exampleConfig.yaml"
 
 class EnvInteractor(SimpleImageViewer):
     """
@@ -163,7 +163,7 @@ def record_episode(seed, env, viewer, obs):
         total_steps[0] += 1
 
         time.sleep(0.025)
-        print("\rstep#{} speed_r={:0.4f} angle={}, pos=({:.2f}, {:.2f}, {:.2f}), speed=({:.2f}, {:.2f}, {:.2f})".format(
+        print("\rstep#{} speed_r={:0.4f} angle={:.2f}, pos=({:.2f}, {:.2f}, {:.2f}), speed=({:.2f}, {:.2f}, {:.2f})".format(
             total_steps[0], speed_reward,
             angle, x,z,y, dx,dz,dy# rew
         ), end="")

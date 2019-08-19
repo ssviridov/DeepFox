@@ -2,6 +2,9 @@
 arenas:
   0: !Arena
     t: 250
+    blackouts: [-40]
     items:
+    - !Item
+      name: Wall
     - !Item
       name: GoodGoal

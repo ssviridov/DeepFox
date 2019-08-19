@@ -36,6 +36,8 @@ class AnimalAIWrapper(gym.Env):
         super(AnimalAIWrapper, self).__init__()
         #if config_generator is None we use random config!
         self.config_generator = config_generator if config_generator else SingleConfigGenerator()
+        # all configs are copies of the config in the parent process, we need to make them different:
+        self.config_generator.shuffle()
         self.image_only=image_only
         self.channel_first = channel_first
 

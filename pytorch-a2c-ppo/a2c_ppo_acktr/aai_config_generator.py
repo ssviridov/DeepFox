@@ -14,6 +14,8 @@ class ConfigGenerator(object):
     def next_config(self, *args, **kwargs):
         raise NotImplementedError()
 
+    def shuffle(self):
+        raise NotImplementedError()
 
 class SingleConfigGenerator(ConfigGenerator):
     """
@@ -31,6 +33,8 @@ class SingleConfigGenerator(ConfigGenerator):
     def next_config(self, *args, **kwargs):
         return {"config":self.config, "config_name":self.config_name}
 
+    def shuffle(self):
+        pass
 
 class ListSampler(ConfigGenerator):
     """
@@ -79,10 +83,14 @@ class ListSampler(ConfigGenerator):
         np.random.shuffle(combined)
         self.configs, self.config_names = zip(*combined)
 
-        np.random.shuffle(configs)
         self.next_id = 0
         #self.probs = np.asarray(probs) if probs else None
         #assert self.probs is None or len(self.probs) == len(self.default_configs), "wrong number of probabilities were given!"
+
+    def shuffle(self):
+        combined = list(zip(self.configs, self.config_names))
+        np.random.shuffle(combined)
+        self.configs, self.config_names = zip(*combined)
 
     def next_config(self):
         config = self.configs[self.next_id]

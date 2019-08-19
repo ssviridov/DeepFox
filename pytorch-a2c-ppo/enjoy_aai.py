@@ -25,7 +25,10 @@ def load_args(folder, file_name='train_args.json'):
         return None
 
 def get_config_name(venv_aai):
-    return env.venv.envs[0].unwrapped.config_name
+    name = env.venv.envs[0].unwrapped.config_name
+    if name[-1].isdigit():
+        return name[:-6] #different instances of one env type have a digit at the end
+    return name[:-5] #no .yaml suffix
 
 parser = argparse.ArgumentParser(description='RL')
 
@@ -69,8 +72,8 @@ if args.seed is None:
     args.seed = np.random.randint(1000)
 
 device = torch.device("cuda:0" if args.cuda else "cpu")
-#gen_config = ListSampler.create_from_dir(args.config_dir)
-gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/1-Food.yaml")
+gen_config = ListSampler.create_from_dir(args.config_dir)
+#gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/1-Food.yaml")
 
 train_args = load_args(os.path.dirname(args.model_path))
 
@@ -98,9 +101,11 @@ actor_critic = data['model'] if isinstance(data, dict) else data[0]
 actor_critic = actor_critic.to(device)
 
 episode_rewards = []
+episode_success = []
 episode_steps = []
 
-configs2episodes={}
+configs2reward={}
+configs2success={}
 
 for episode in range(args.num_episodes):
     rnn_state = torch.zeros(1, actor_critic.recurrent_hidden_state_size).to(device)
@@ -111,7 +116,8 @@ for episode in range(args.num_episodes):
     print("Episode#{}".format(episode+1))
 
     curr_config = get_config_name(env)
-    configs2episodes.setdefault(curr_config, [])
+    configs2reward.setdefault(curr_config, [])
+    configs2success.setdefault(curr_config, [])
 
     print("CONFIG: {}".format(curr_config))
     total_r = 0.
@@ -125,19 +131,25 @@ for episode in range(args.num_episodes):
         obs, reward, done, info = env.step(action)
         total_r += reward.item()
         time.sleep(args.delay)
-        if done: break
-        #masks.fill_(0.0 if done else 1.0)
+        if done:
 
-    episode_rewards.append(total_r)
-    configs2episodes[curr_config].append(total_r)
+            break
+        #masks.fill_(0.0 if done else 1.0)
+    episode_rewards.append(info[0]['episode_reward'])
+    episode_success.append(info[0]['episode_success'])
     episode_steps.append(t)
+
+    configs2reward[curr_config].append(info[0]['episode_reward'])
+    configs2success[curr_config].append(info[0]['episode_success'])
+
     print('total_r={:0.2f}, num_steps={}\n'.format(total_r, t))
 
 print('Played {} episodes total:'.format(args.num_episodes))
 print('Mean R: {:0.2f}'.format(np.mean(episode_rewards)))
 print("Median R: {:0.2f}".format(np.median(episode_rewards)))
+print('Mean success: {:0.2f}'.format(np.mean(episode_success)))
 print("Mean Steps: {:0.1f}".format(np.mean(episode_steps)))
 print()
-for k in sorted(configs2episodes.keys()):
-    v = configs2episodes[k]
+for k in sorted(configs2reward.keys()):
+    v = configs2reward[k]
     print("{}: {:0.2f} avr reward".format(k, np.mean(v)))

@@ -121,3 +121,54 @@ class AAIBase(NNBase):
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
         return self.critic_linear(x), x, rnn_hxs
+
+import torchvision
+class AAIResnet(AAIBase):
+
+    def __init__(self, *args, **kwargs):
+        if "freeze_resnet" in kwargs:
+            self.freeze_resnet = kwargs.pop('freeze_resnet')
+        else:
+            self.freeze_resnet = False
+
+        super(AAIResnet, self).__init__(*args, **kwargs)
+
+    def _create_image_encoder(self):
+        num_channels = self.obs_shapes['image'][0]
+        assert num_channels == 3, 'Pretrained resnet knows no history!'
+
+        net = torchvision.models.resnet18(pretrained=self.freeze_resnet)
+
+        resnet = nn.Sequential(
+            net.conv1,
+            net.bn1,
+            net.relu,
+            net.maxpool,
+            net.layer1,
+            net.layer2,
+            net.layer3,
+            net.layer4,
+            nn.AvgPool2d(kernel_size=2, stride=2, padding=0, ceil_mode=False,
+                         count_include_pad=True))
+        if self.freeze_resnet:
+            for p in resnet.parameters():
+                p.requires_grad = False
+
+        return resnet
+
+    def forward(self, input, rnn_hxs, masks, **kwargs):
+
+        if self._image_only_obs:
+            x = self.image_encoder(input/255.0)
+            x = x.view(x.shape[0],-1)
+        else:
+            x_img = self.image_encoder(input['image']/255.0)
+            x_img = x_img.view(x_img.shape[0], -1)
+            inp_extra = th.cat([input[k] for k in self._extra_obs], dim=1)
+            x_extra = self.extra_encoder(inp_extra)
+            x = th.cat([x_img, x_extra], dim=1)
+
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        return self.critic_linear(x), x, rnn_hxs

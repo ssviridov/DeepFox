@@ -14,7 +14,7 @@ import torch.optim as optim
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.aai_arguments import get_args
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_models import AAIPolicy, Policy
+from a2c_ppo_acktr.aai_models import AAIPolicy, Policy, AAIResnet
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
@@ -66,9 +66,11 @@ class DummySaver(object):
                 torch.save(data, self.best_model_path)
 
     def _build_save_path(self, args):
-        sub_folder = "{}-{}".format(
+
+        sub_folder = "{}-{}-{}".format(
             args.algo,
-            "rnn" if args.recurrent_policy else "ff"
+            "rnn" if args.recurrent_policy else "ff",
+            "extra-obs" if args.extra_obs else "pure"
         )
         save_subdir = os.path.join(args.save_dir, sub_folder)
         return save_subdir
@@ -122,6 +124,14 @@ def log_progress(summary,
 
     summary.add_scalars("Performance/FPS", {"total":fps, "loop":loop_fps}, curr_step)
 
+def args_to_str(args):
+    lines = ['','ARGUMENTS:']
+    newline = os.linesep
+    args = vars(args)
+    for key in sorted(args.keys()):
+        lines.append('    "{0}": {1}'.format(key, args[key]))
+    return newline.join(lines)
+
 
 def main():
     args = get_args()
@@ -129,12 +139,6 @@ def main():
         args.seed = np.random.randint(1000)
     steps_per_update = args.num_steps*args.num_processes
     args.total_updates = int(args.num_env_steps) // steps_per_update
-
-    print("env_path:", args.env_path)
-    print("config_dir:", args.config_dir)
-    print("headless:", args.headless)
-    print("recurrent_policy:", args.recurrent_policy)
-    print()
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
@@ -152,11 +156,11 @@ def main():
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
-    #gen_config = ListSampler.create_from_dir(args.config_dir)
-    gen_config = SingleConfigGenerator.from_file(
+    gen_config = ListSampler.create_from_dir(args.config_dir)
+    #gen_config = SingleConfigGenerator.from_file(
         #"aai_resources/test_configs/MySample2.yaml"
-        "aai_resources/default_configs/1-Food.yaml"
-    )
+    #    "aai_resources/default_configs/1-Food.yaml"
+    #)
     test_gen_config = copy.deepcopy(gen_config)
 
     envs = make_vec_envs_aai(
@@ -168,12 +172,14 @@ def main():
     actor_critic = AAIPolicy(
         envs.observation_space,
         envs.action_space,
+        #base=AAIResnet,
         base_kwargs={
             'recurrent': args.recurrent_policy,
             'extra_obs': args.extra_obs,
             'hidden_size':512,
             'extra_encoder_dim':128,
-            'image_encoder_dim':512
+            'image_encoder_dim':512,
+        #    'freeze_resnet':True,
         }
     )
 
@@ -222,9 +228,11 @@ def main():
     episode_success = deque(maxlen=100)
     episode_len = deque(maxlen=100)
 
+    print(args_to_str(args))
+
     start_time = time.time()
     model_saver = DummySaver(args)
-    summary = SummaryWriter(os.path.join(model_saver.save_subdir, 'summary'))
+    summary = None # SummaryWriter(os.path.join(model_saver.save_subdir, 'summary'))
     try:
         for curr_update in range(args.total_updates):
             loop_start_time = time.time()
@@ -238,7 +246,7 @@ def main():
                 # Sample actions
                 with torch.no_grad():
 
-                    assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!'
+#                    assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!'
 
                     value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
                         obs, #rollouts.obs[step],
@@ -265,7 +273,7 @@ def main():
                                 action_log_prob, value, reward, masks, bad_masks)
 
             with torch.no_grad():
-                assert torch.equal(obs['image'], rollouts.obs[-1].asdict()['image']), 'woy!! this is strange!'
+    #            assert torch.equal(obs['image'], rollouts.obs[-1].asdict()['image']), 'woy!! this is strange!'
                 next_value = actor_critic.get_value(
                     obs, #rollouts.obs[-1],
                     rollouts.recurrent_hidden_states[-1],

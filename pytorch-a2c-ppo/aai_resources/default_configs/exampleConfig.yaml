@@ -4,20 +4,22 @@ arenas:
     t: 1000
     items:
     - !Item
-      name: Cube
+      name: Wall
       positions:
-      - !Vector3 {x: 10, y: 0, z: 10}
-      - !Vector3 {x: -1, y: 0, z: 30}
-      colors:
-      - !RGB {r: 204, g: 0, b: 204 }
+      - !Vector3 {x: 10, y: -1, z: 10}
+      - !Vector3 {x: -1, y: -1, z: 30}
+      #colors:
+      #- !RGB {r: 204, g: 0, b: 204 }
       rotations: [45]
       sizes:
       - !Vector3 {x: -1, y: 5, z: -1}
     - !Item
-      name: Cylinder
-      colors:
-      - !RGB {r: 204, g: 0, b: 204 }
-      - !RGB {r: 204, g: 0, b: 204 }
-      - !RGB {r: 204, g: 0, b: 204 }
+      name: CylinderTunnel
+      #colors:
+      #- !RGB {r: 204, g: 0, b: 204 }
+      #- !RGB {r: 204, g: 0, b: 204 }
+      #- !RGB {r: 204, g: 0, b: 204 }
     - !Item
-      name: GoodGoal
+      name: GoodGoalMultiBounce
+    - !Item
+      name: GoodGoalMulti
