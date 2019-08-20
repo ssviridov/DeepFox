@@ -25,6 +25,10 @@ def get_args():
         help="A list of additional observations for agents to receive. "
              "Possible choices are: pos, speed, angle"
     )
+    parser.add_argument(
+        '-fs', '--frame-stack', type=int, default=2,
+        help="Number of image frames to stack into agent's observation, (default: 2)",
+    )
     #PPO/A2C arguments:
     parser.add_argument(
         '--algo', default='a2c', help='algorithm to use: a2c | ppo | acktr')

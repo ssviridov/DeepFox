@@ -14,7 +14,7 @@ import torch.optim as optim
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.aai_arguments import get_args
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_models import AAIPolicy, Policy, AAIResnet
+from a2c_ppo_acktr.aai_models import AAIPolicy, AAIResnet, ImageVecMapBase
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
@@ -158,27 +158,26 @@ def main():
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
     gen_config = ListSampler.create_from_dir(args.config_dir)
-    #gen_config = SingleConfigGenerator.from_file(
+    gen_config = SingleConfigGenerator.from_file(
         #"aai_resources/test_configs/MySample2.yaml"
-    #    "aai_resources/default_configs/1-Food.yaml"
-    #)
-    test_gen_config = copy.deepcopy(gen_config)
+        "aai_resources/default_configs/1-Food.yaml"
+    )
 
     envs = make_vec_envs_aai(
         args.env_path, gen_config, args.seed, args.num_processes,
-        device, grid_exploration=True, headless=args.headless,
-        image_only=len(args.extra_obs) == 0,
+        device,  grid_exploration=True, num_frame_stack=args.frame_stack,
+        headless=args.headless, image_only=len(args.extra_obs) == 0,
     )
 
     actor_critic = AAIPolicy(
         envs.observation_space,
         envs.action_space,
-        #base=AAIResnet,
+        base=ImageVecMapBase,
         base_kwargs={
             'recurrent': args.recurrent_policy,
             'extra_obs': args.extra_obs,
             'hidden_size':512,
-            'extra_encoder_dim':128,
+            'extra_encoder_dim':256,
             'image_encoder_dim':512,
         #    'freeze_resnet':True,
         }
@@ -311,8 +310,9 @@ def main():
 
             if (args.eval_interval is not None and len(episode_rewards) > 1
                     and curr_update % args.eval_interval == 0):
-                evaluate(actor_critic, args.env_path, test_gen_config, args.seed,
-                         args.num_processes, eval_log_dir, device, args.headless)
+                raise NotImplementedError("evaluation doen't work because we can't close opened envs")
+            #    evaluate(actor_critic, args.env_path, test_gen_config, args.seed,
+            #             args.num_processes, eval_log_dir, device, args.headless)
 
     finally:
         if summary: summary.close()
