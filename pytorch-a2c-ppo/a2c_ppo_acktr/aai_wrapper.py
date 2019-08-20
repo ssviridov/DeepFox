@@ -182,12 +182,12 @@ class GridBasedExploration(gym.Wrapper):
         self, env,
         visiting_r=1./100.,
         grid_size=(31,5,31), # we start at the center of X, and Z, dimensions and at the bottom of Y
-        cell_size=(1.,1./2, 1.),
+        cell_size=(1., 1/2., 1.),
         observe_map=False, #the map is trasposed to shape (Y, X, Z)
         trace_decay=1.,  # this means no decay!
         revisit_threshold = 0.01
     ):
-        assert isinstance(env.observation_space, space.Dict), "This wrapper use obs['pos']!"
+        #assert isinstance(env.observation_space, space.Dict), "This wrapper use obs['pos']!"
         super(GridBasedExploration, self).__init__(env)
         self.grid_size=np.array(grid_size)
         self.cell_size=np.array(cell_size)
@@ -203,7 +203,7 @@ class GridBasedExploration(gym.Wrapper):
             spaces = dict(self.observation_space.spaces)
             spaces['visited'] = space.Box(
                 0., 1.,
-                shape=(grid_size[1], grid_size[0], grid_size[1]),#Y, X, Z
+                shape=(grid_size[1], grid_size[0], grid_size[2]),#Y, X, Z
                 dtype=np.float32
             )
             self.observation_space = space.Dict(spaces)
@@ -229,7 +229,7 @@ class GridBasedExploration(gym.Wrapper):
     def step(self, action):
         obs, r, done, info = self.env.step(action)
         if self.trace_decay<1.:
-            self.map *= self.trace_decay
+            self._visited *= self.trace_decay
         cell_pos = obs['pos']/self.cell_size
         x, y, z = np.round(cell_pos).astype(np.int32)
         expl_r = self.visit(x,y,z)
@@ -254,7 +254,7 @@ class GridBasedExploration(gym.Wrapper):
         r = self.visiting_r if self._visited[x,y,z] < self.revisit_threshold else 0.
 
         self.num_visited += int(r != 0.)
-        self._map[x,y,z] = 1.
+        self._visited[x,y,z] = 1.
         return r
 
 
@@ -266,7 +266,14 @@ def make_env_aai(env_path, config_generator, rank, grid_exploration=True, headle
         if grid_exploration:
             assert not kwargs.get('image_only', True), \
                 "Grid exploration wrapper works only when image_only is set to False"
-            env = GridBasedExploration(env, observe_map=True)
+            env = GridBasedExploration(
+                env,
+                grid_size=(15,5,15),
+                cell_size=(2.,1/2.,2.),
+                visiting_r=2./100.,
+                observe_map=True,
+                trace_decay=1.
+            )
         return env
 
     return _thunk
