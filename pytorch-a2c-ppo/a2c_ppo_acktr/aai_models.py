@@ -1,9 +1,11 @@
+from collections import OrderedDict
+
 from .model import CNNBase, NNBase, Bernoulli,\
     Categorical, DiagGaussian, MLPBase, Flatten, Policy
 import gym
 from torch import nn
 import torch as th
-from a2c_ppo_acktr.utils import init
+from a2c_ppo_acktr.utils import init, conv_output_shape
 
 class AAIPolicy(Policy):
     def __init__(self, obs_space, action_space, base=None, base_kwargs=None):
@@ -73,7 +75,6 @@ class AAIBase(NNBase):
         else:
             return {"image":obs_space.shape}
 
-
     def _create_critic(self):
         init_ = lambda m:init(m, nn.init.orthogonal_, lambda x:nn.init.constant_(x, 0))
         return init_(nn.Linear(self._hidden_size, 1))
@@ -121,6 +122,120 @@ class AAIBase(NNBase):
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
         return self.critic_linear(x), x, rnn_hxs
+
+
+class ImageVecMapBase(NNBase):
+
+    def __init__(
+            self,
+            obs_space,
+            extra_obs=None,
+            recurrent=False,
+            hidden_size=512,
+            extra_encoder_dim=512,
+            image_encoder_dim=512,
+    ):
+        self._image_encoder_dim = image_encoder_dim
+        # if there is no extra_obs then we don't need an extra_encoder!
+        self._extra_encoder_dim = extra_encoder_dim if extra_obs else 0
+        self._total_encoder_dim = self._image_encoder_dim + self._extra_encoder_dim
+        # if recurrent is False there will be no layer after encoders ouputs:
+        self._hidden_size = hidden_size if recurrent else self._total_encoder_dim
+        self._extra_obs = extra_obs
+
+        super(ImageVecMapBase, self).__init__(
+            recurrent,
+            self._total_encoder_dim,
+            self._hidden_size
+        )
+
+        self.obs_shapes = self._get_obs_shapes(obs_space)
+        self._image_only_obs = isinstance(obs_space, gym.spaces.Box)
+
+        self._create_image_encoder()
+
+        if self._extra_obs:
+            self._create_extra_encoder()
+
+        self._create_critic()
+
+        self.train()
+
+    def _get_obs_shapes(self, obs_space):
+        if isinstance(obs_space, gym.spaces.Dict):
+            return {k: v.shape for k, v in obs_space.spaces.items()}
+        else:
+            return {"image": obs_space.shape}
+
+    def _create_critic(self):
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0))
+        self.critic_linear = init_(nn.Linear(self._hidden_size, 1))
+
+    def _create_image_encoder(self):
+        num_channels = self.obs_shapes['image'][0]
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+                               constant_(x, 0), nn.init.calculate_gain('relu'))
+
+        self.image_encoder = nn.Sequential(
+            init_(nn.Conv2d(num_channels, 32, 8, stride=4)), nn.ReLU(),
+            init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
+            init_(nn.Conv2d(64, 32, 3, stride=1)), nn.ReLU(), Flatten(),
+            init_(nn.Linear(32 * 7 * 7, self._image_encoder_dim)), nn.ReLU()
+        )
+
+    def _create_map_encoder(self):
+        num_channels, H, W = self.obs_shapes['visited']
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+                               constant_(x, 0), nn.init.calculate_gain('relu'))
+
+        self.map_encoder = nn.Sequential(
+            init_(nn.Conv2d(num_channels, 16, 4, 2)), nn.ReLU(),
+            init_(nn.Conv2d(16, 32, 3, 1)), nn.ReLU(),
+            nn.MaxPool2d(2, stride=2),
+            Flatten()
+        )
+
+    def _create_extra_encoder(self):
+        input_features = 0
+        if 'visited' in self._extra_obs:
+            self._create_map_encoder()
+            input_features += conv_output_shape(self.obs_shapes['visited'], self.map_encoder)[0]
+        else:
+            self.map_encoder = None
+
+        self._vector_obs = [k for k in self._extra_obs if len(self.obs_shapes[k]) == 1]
+        for k in self._vector_obs:
+            input_features += self.obs_shapes[k][0]
+
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+                               constant_(x, 0), nn.init.calculate_gain('relu'))
+
+        self.extra_linear = nn.Sequential(
+            init_(nn.Linear(input_features, self._extra_encoder_dim)),
+            nn.ReLU()
+        )
+
+    def extra_encoder(self, obs):
+        input = th.cat([obs[k] for k in self._vector_obs], dim=1)
+        if self.map_encoder:
+            map_embed = self.map_encoder(obs['visited'])
+            input = th.cat([input, map_embed], dim=1)
+        return self.extra_linear(input)
+
+    def forward(self, input, rnn_hxs, masks, **kwargs):
+
+        if self._image_only_obs:
+            x = self.image_encoder(input / 255.0)
+        else:
+            x_img = self.image_encoder(input['image'] / 255.0)
+            x_extra = self.extra_encoder(input)
+            x = th.cat([x_img, x_extra], dim=1)
+
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        return self.critic_linear(x), x, rnn_hxs
+
 
 import torchvision
 class AAIResnet(AAIBase):

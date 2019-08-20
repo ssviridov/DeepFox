@@ -63,3 +63,14 @@ def cleanup_log_dir(log_dir):
         files = glob.glob(os.path.join(log_dir, '*.monitor.csv'))
         for f in files:
             os.remove(f)
+
+
+def conv_output_shape(input_shape, layers):
+    with torch.no_grad():
+        x = torch.randn(input_shape).unsqueeze(0)
+        if isinstance(layers, dict):
+            for k, l in layers.items():
+                x = l(x)
+            return x.shape
+
+        return layers(x).shape[1:]

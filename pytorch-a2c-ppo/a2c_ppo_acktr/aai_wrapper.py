@@ -259,8 +259,7 @@ class GridBasedExploration(gym.Wrapper):
 
 
 def make_env_aai(env_path, config_generator, rank, grid_exploration=True, headless=False, **kwargs):
-    if env_path is None:
-        env_path = 'aai_resources/env/AnimalAI.x86_64'
+
     def _thunk():
         env = AnimalAIWrapper(env_path, rank, config_generator, headless=headless, **kwargs)
         if grid_exploration:
@@ -270,9 +269,9 @@ def make_env_aai(env_path, config_generator, rank, grid_exploration=True, headle
                 env,
                 grid_size=(15,5,15),
                 cell_size=(2.,1/2.,2.),
-                visiting_r=2./100.,
+                visiting_r=0.,# 2./100.,
                 observe_map=True,
-                trace_decay=1.
+                trace_decay=0.999
             )
         return env
 
