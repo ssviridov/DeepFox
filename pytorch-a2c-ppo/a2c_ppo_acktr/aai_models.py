@@ -135,7 +135,6 @@ class AAIResnet(AAIBase):
 
     def _create_image_encoder(self):
         num_channels = self.obs_shapes['image'][0]
-        assert num_channels == 3, 'Pretrained resnet knows no history!'
 
         net = torchvision.models.resnet18(pretrained=self.freeze_resnet)
 
@@ -150,10 +149,13 @@ class AAIResnet(AAIBase):
             net.layer4,
             nn.AvgPool2d(kernel_size=2, stride=2, padding=0, ceil_mode=False,
                          count_include_pad=True))
+
         if self.freeze_resnet:
             for p in resnet.parameters():
                 p.requires_grad = False
-
+        else:
+            resnet.conv1 = nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3,
+                               bias=False)
         return resnet
 
     def forward(self, input, rnn_hxs, masks, **kwargs):
