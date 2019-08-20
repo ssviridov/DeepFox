@@ -4,7 +4,7 @@ from PIL import Image
 from gym.envs.classic_control.rendering import SimpleImageViewer
 import numpy as np
 import pyglet.window
-from a2c_ppo_acktr.aai_wrapper import AnimalAIWrapper
+from a2c_ppo_acktr.aai_wrapper import AnimalAIWrapper, make_env_aai
 from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator
 
 aai_path = "aai_resources/env/AnimalAI"
@@ -98,7 +98,7 @@ class EnvInteractor(SimpleImageViewer):
 
                 if obs is None:
                     return
-                self.imshow(obs)
+                self.imshow(obs['image'])
             else:
                 # Needed to run the event loop
                 self.imshow(self._masked_img)
@@ -113,14 +113,11 @@ def main():
     rank = np.random.randint(0, 1000)
     viewer = EnvInteractor()
     gen_config = SingleConfigGenerator.from_file(curr_config)
-    env = AnimalAIWrapper(
-        aai_path,
-        rank,
-        gen_config,
-        channel_first=False,
-        image_only=False,
-    )
-
+    make = make_env_aai(aai_path,gen_config, rank, None, None, channel_first=False, image_only=False)
+    env = make()
+    #env = AnimalAIWrapper(
+    #    aai_path, rank, gen_config, channel_first=False, image_only=False,
+    #)
     run_episode(env, viewer)
 
 
@@ -163,10 +160,12 @@ def record_episode(seed, env, viewer, obs):
         total_steps[0] += 1
 
         time.sleep(0.025)
-        print("\rstep#{} speed_r={:0.4f} angle={:.2f}, pos=({:.2f}, {:.2f}, {:.2f}), speed=({:.2f}, {:.2f}, {:.2f})".format(
+        print("step#{} speed_r={:0.4f} angle={:.2f}, pos=({:.2f}, {:.2f}, {:.2f}), speed=({:.2f}, {:.2f}, {:.2f})".format(
             total_steps[0], speed_reward,
             angle, x,z,y, dx,dz,dy# rew
-        ), end="")
+        ), end="\n")
+
+        print("VISITED:\n", obs['visited'][0])
 
         if done:
             print('\nFinal Reward: {}, INFO: {}'.format(rew, info))

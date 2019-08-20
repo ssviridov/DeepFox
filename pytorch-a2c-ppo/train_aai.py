@@ -165,7 +165,7 @@ def main():
 
     envs = make_vec_envs_aai(
         args.env_path, gen_config, args.seed, args.num_processes,
-        args.log_dir,  device, allow_early_resets=False, headless=args.headless,
+        device, headless=args.headless,
         image_only=len(args.extra_obs) == 0,
     )
 
@@ -246,8 +246,7 @@ def main():
                 # Sample actions
                 with torch.no_grad():
 
-#                    assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!'
-
+                    #assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!
                     value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
                         obs, #rollouts.obs[step],
                         rollouts.recurrent_hidden_states[step],
