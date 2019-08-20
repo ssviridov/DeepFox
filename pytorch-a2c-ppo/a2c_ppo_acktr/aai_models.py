@@ -154,7 +154,7 @@ class AAIResnet(AAIBase):
             for p in resnet.parameters():
                 p.requires_grad = False
         else:
-            resnet.conv1 = nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3,
+            resnet[0] = nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
         return resnet
 
