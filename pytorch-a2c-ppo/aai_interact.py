@@ -4,12 +4,13 @@ from PIL import Image
 from gym.envs.classic_control.rendering import SimpleImageViewer
 import numpy as np
 import pyglet.window
-from a2c_ppo_acktr.aai_wrapper import AnimalAIWrapper
+from a2c_ppo_acktr.aai_wrapper import AnimalAIWrapper, make_env_aai
 from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator
+import cv2
 
 aai_path = "aai_resources/env/AnimalAI"
-aai_config_dir = "aai_resources/default_configs/"#"aai_resources/test_configs/"
-curr_config = aai_config_dir + "exampleConfig.yaml"
+aai_config_dir = "aai_resources/test_configs/" #"aai_resources/test_configs/"
+curr_config = aai_config_dir + "MySample.yaml" #"exampleConfig.yaml"
 
 class EnvInteractor(SimpleImageViewer):
     """
@@ -29,7 +30,7 @@ class EnvInteractor(SimpleImageViewer):
         self._last_image = image
         was_none = self.window is None
         image = Image.fromarray(image.astype(np.uint8))
-        image = image.resize((400, 400))
+        image = image.resize((800, 400))
         image = np.array(image)
         super().imshow(image)
         if was_none:
@@ -113,14 +114,11 @@ def main():
     rank = np.random.randint(0, 1000)
     viewer = EnvInteractor()
     gen_config = SingleConfigGenerator.from_file(curr_config)
-    env = AnimalAIWrapper(
-        aai_path,
-        rank,
-        gen_config,
-        channel_first=False,
-        image_only=False,
-    )
-
+    make = make_env_aai(aai_path,gen_config, rank, True, channel_first=False, image_only=False)
+    env = make()
+    #env = AnimalAIWrapper(
+    #    aai_path, rank, gen_config, channel_first=False, image_only=False,
+    #)
     run_episode(env, viewer)
 
 
@@ -139,6 +137,11 @@ def rotate(vec, angle):
     z1 = np.sin(betta) * x + np.cos(betta) * z
     return np.array([x1, y, z1])
 
+def concat_images(image, map_view):
+    map_view = map_view[:3].transpose(1,2,0)*255
+    map_view = cv2.resize(map_view, (84, 84))
+    return np.concatenate((image, map_view), axis=1)
+
 def record_episode(seed, env, viewer, obs):
 
     action_log = []
@@ -147,7 +150,7 @@ def record_episode(seed, env, viewer, obs):
     coef = 0.92
     total_steps = [0]
     actions = [0]*100 +  [1]*15 + [0]*10 + [1]*15 + [0]*10 + [1]*15 + [0]*10 + [1]*15 + [0]*5000
-
+    map_window = SimpleImageViewer(400)
     def step(action):
         action_log.append(action)
 
@@ -163,16 +166,24 @@ def record_episode(seed, env, viewer, obs):
         total_steps[0] += 1
 
         time.sleep(0.025)
-        print("\rstep#{} speed_r={:0.4f} angle={:.2f}, pos=({:.2f}, {:.2f}, {:.2f}), speed=({:.2f}, {:.2f}, {:.2f})".format(
+        print("\rstep#{} speed_r={:0.4f} angle={:.1f}, pos=({:.2f}, {:.2f}, {:.2f}),"
+              " speed=({:.2f}, {:.2f}, {:.2f}), n_visited={}, expl_r={}".format(
             total_steps[0], speed_reward,
-            angle, x,z,y, dx,dz,dy# rew
+            (angle+1)*360, x*70,z*70,y*70, dx*10,dz*10,dy*10,
+            info['exploration']['n_visited'], info['exploration']['r'] # rew
         ), end="")
 
+        if info['exploration']['r'] > 0.0:
+            print("\nr={}".format(info['exploration']['r']))
+
+        img = concat_images(obs['image'], obs['visited'])
+        #print("VISITED:\n", obs['visited'][0])
+        #map_window.imshow(map2img(obs['visited']))
         if done:
             print('\nFinal Reward: {}, INFO: {}'.format(rew, info))
             return None
 
-        return obs["image"]
+        return img
    # #config = remove_cardbox2(env.config_generator.next_config())
     #ob0 = env.reset(config).astype(np.uint8)
     #config = env.config_generator.next_config()

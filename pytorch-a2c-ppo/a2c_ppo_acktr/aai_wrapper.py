@@ -182,12 +182,12 @@ class GridBasedExploration(gym.Wrapper):
         self, env,
         visiting_r=1./100.,
         grid_size=(31,5,31), # we start at the center of X, and Z, dimensions and at the bottom of Y
-        cell_size=(1.,1./2, 1.),
-        observe_map=False,
+        cell_size=(1., 1/2., 1.),
+        observe_map=False, #the map is trasposed to shape (Y, X, Z)
         trace_decay=1.,  # this means no decay!
         revisit_threshold = 0.01
     ):
-        assert isinstance(env.observation_space, space.Dict), "This wrapper use obs['pos']!"
+        #assert isinstance(env.observation_space, space.Dict), "This wrapper use obs['pos']!"
         super(GridBasedExploration, self).__init__(env)
         self.grid_size=np.array(grid_size)
         self.cell_size=np.array(cell_size)
@@ -196,75 +196,99 @@ class GridBasedExploration(gym.Wrapper):
         self._visited = np.zeros(grid_size, dtype=np.float32)
         self.revisit_threshold = revisit_threshold
         self.total_expl_r = 0.
+        self.num_visited = 0
+        self.trace_decay = trace_decay
+
+        if observe_map:
+            spaces = dict(self.observation_space.spaces)
+            spaces['visited'] = space.Box(
+                0., 1.,
+                shape=(grid_size[1], grid_size[0], grid_size[2]),#Y, X, Z
+                dtype=np.float32
+            )
+            self.observation_space = space.Dict(spaces)
 
     def set_start_coords(self):
-        self.start_x = grid_size[0] // 2
+        self.start_x = self.grid_size[0] // 2
         self.start_y = 0 # Y is a vertical dimension but we start slightly bellow the ground somehow
-        self.start_z = grid_size[2] // 2
+        self.start_z = self.grid_size[2] // 2
 
     def reset(self, **kwargs):
         self._visited[:] = 0
         self.set_start_coords()
-        self._visited[x,y,z] = 1.
+        self._visited[self.start_x, self.start_y, self.start_z] = 1.
+        self.num_visited = 1
         obs = self.env.reset(**kwargs)
         return self._observation(obs)
 
-    def _observation(self):
+    def _observation(self, obs):
         if self.observe_map:
-            obs['visited'] = self._visited.copy()
+            obs['visited'] = self._visited.copy().transpose(1, 0, 2)
         return obs
 
     def step(self, action):
         obs, r, done, info = self.env.step(action)
         if self.trace_decay<1.:
-            self.map *= self.trace_decay
+            self._visited *= self.trace_decay
         cell_pos = obs['pos']/self.cell_size
         x, y, z = np.round(cell_pos).astype(np.int32)
-        r = self.visit(x,y,z)
+        expl_r = self.visit(x,y,z)
         obs = self._observation(obs)
-        self._fill_info(obs, r, done, info)
+        self._fill_info(obs, expl_r, done, info)
 
-        return obs, r, done, info
+        return obs, r+expl_r, done, info
 
     def _fill_info(self, obs, r, done, info):
         self.total_expl_r += r
+        grid_info = {"n_visited": self.num_visited}
         if self.visiting_r > 0.:
-            info['expl_r'] = r
-            if done:
-                info['episode_expl_r'] = self.total_expl_r
+             grid_info["r"] = r
+        if done:
+            grid_info['episode_r'] = self.total_expl_r
+        info['exploration'] = grid_info
 
     def visit(self, x,y,z):
-        _x += self.start_x
-        _y += self.start_y
-        _z += self.start_z
-        r = self.visiting_r if self._visited[_x,_y,_z] < self.revisit_threshold else 0.
-        self._map[_x,_y,_z] = 1.
+        x += self.start_x
+        y += self.start_y
+        z += self.start_z
+        r = self.visiting_r if self._visited[x,y,z] < self.revisit_threshold else 0.
+
+        self.num_visited += int(r != 0.)
+        self._visited[x,y,z] = 1.
         return r
 
 
-def make_env_aai(env_path, config_generator, rank, log_dir, allow_early_resets, headless=False, **kwargs):
+def make_env_aai(env_path, config_generator, rank, grid_exploration=True, headless=False, **kwargs):
     if env_path is None:
         env_path = 'aai_resources/env/AnimalAI.x86_64'
     def _thunk():
         env = AnimalAIWrapper(env_path, rank, config_generator, headless=headless, **kwargs)
-        #if log_dir is not None:
-        #    env = bench.Monitor(env, os.path.join(log_dir, str(rank)), allow_early_resets=allow_early_resets)
-        # env = TransposeImage(env, op=[2, 0, 1])
+        if grid_exploration:
+            assert not kwargs.get('image_only', True), \
+                "Grid exploration wrapper works only when image_only is set to False"
+            env = GridBasedExploration(
+                env,
+                grid_size=(15,5,15),
+                cell_size=(2.,1/2.,2.),
+                visiting_r=2./100.,
+                observe_map=True,
+                trace_decay=1.
+            )
         return env
 
     return _thunk
 
 
-def make_vec_envs_aai(env_path, config_generator, seed, num_processes, log_dir, device, allow_early_resets,
+def make_vec_envs_aai(env_path, config_generator, seed, num_processes, device, grid_exploration=True,
                       num_frame_stack=None, headless=False, **env_kwargs):
 
-    envs = [make_env_aai(env_path, config_generator,
-                         i+seed, log_dir, allow_early_resets, headless=headless, **env_kwargs)
+    envs = [make_env_aai(env_path, config_generator, i+seed,
+                         grid_exploration, headless=headless, **env_kwargs)
             for i in range(num_processes)]
 
     if len(envs) > 2:
         make_test = make_env_aai(env_path, config_generator, seed+num_processes+1,
-                                 log_dir, allow_early_resets, headless=headless, **env_kwargs)
+                                 grid_exploration, headless=headless, **env_kwargs)
         test_env = make_test()
         spaces = (test_env.observation_space, test_env.action_space)
         print(test_env.observation_space, test_env.action_space)

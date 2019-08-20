@@ -91,7 +91,7 @@ class DummySaver(object):
 
 def log_progress(summary,
         curr_update, curr_step, ep_rewards, ep_success, ep_len,
-        dist_entropy, value_loss, action_loss,
+        ep_visited, dist_entropy, value_loss, action_loss,
         fps, loop_fps,
 ):
     mean_r = np.mean(ep_rewards)
@@ -100,13 +100,14 @@ def log_progress(summary,
     max_r = np.max(ep_rewards)
     mean_success = np.mean(ep_success)
     mean_eplen = np.mean(ep_len)
+    mean_visited = np.mean(ep_visited)
     print(
         "Updates {}, num_steps {}, FPS/Loop FPS {}/{} \n"
         "Last {} episodes:\n  mean/median R {:.2f}/{:.2f}, min/max R {:.1f}/{:.1f}\n"
-        "  mean success {:.2f},  mean length {:.1f}\n".format(
+        "  mean success {:.2f},  mean length {:.1f}, mean visted {:.1f}\n".format(
             curr_update, curr_step, fps, loop_fps,
             len(ep_rewards), mean_r, median_r,
-            min_r, max_r, mean_success, mean_eplen
+            min_r, max_r, mean_success, mean_eplen, mean_visited
         )
     )
 
@@ -165,7 +166,7 @@ def main():
 
     envs = make_vec_envs_aai(
         args.env_path, gen_config, args.seed, args.num_processes,
-        args.log_dir,  device, allow_early_resets=False, headless=args.headless,
+        device, grid_exploration=True, headless=args.headless,
         image_only=len(args.extra_obs) == 0,
     )
 
@@ -227,6 +228,7 @@ def main():
     episode_rewards = deque(maxlen=100)
     episode_success = deque(maxlen=100)
     episode_len = deque(maxlen=100)
+    episode_visited = deque(maxlen=100)
 
     print(args_to_str(args))
 
@@ -246,8 +248,7 @@ def main():
                 # Sample actions
                 with torch.no_grad():
 
-#                    assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!'
-
+                    #assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!
                     value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
                         obs, #rollouts.obs[step],
                         rollouts.recurrent_hidden_states[step],
@@ -261,6 +262,8 @@ def main():
                         episode_rewards.append(info['episode_reward'])
                         episode_success.append(info['episode_success'])
                         episode_len.append(info['episode_len'])
+                        if "exploration" in info:
+                            episode_visited.append(info["exploration"]["n_visited"])
 
                 # If done then clean the history of observations.
                 masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done])
@@ -293,6 +296,7 @@ def main():
                 log_progress(
                     summary,curr_update, curr_steps,
                     episode_rewards, episode_success, episode_len,
+                    episode_visited,
                     dist_entropy, value_loss, action_loss,
                     fps=int(curr_steps/(time.time()-start_time)),
                     loop_fps=int(steps_per_update/(time.time()-loop_start_time))

@@ -5,12 +5,12 @@ from a2c_ppo_acktr import utils
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
 
 
-def evaluate(actor_critic, env_path, gen_config, seed, num_processes, eval_log_dir,
-             device, headless):
+def evaluate(actor_critic, env_path, gen_config, seed, num_processes,
+             device, grid_exploration, headless):
 
     envs = make_vec_envs_aai(
         env_path, gen_config, seed+num_processes+10, num_processes,
-        eval_log_dir, device, allow_early_resets=False, headless=headless
+        device, grid_exploration, headless=headless
     )
     #eval_envs = make_vec_envs_aai(
     #   env_name, seed + num_processes, num_processes,
