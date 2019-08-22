@@ -1,12 +1,6 @@
-import yaml
-from animalai_train.trainers.ppo.policy import PPOPolicy
-from animalai.envs.brain import BrainParameters
 from animalai.envs.gym.environment import AnimalAIEnv
 from animalai.envs.arena_config import ArenaConfig
-from collections import deque, defaultdict
-import torch as th
-import itertools as it
-import numpy as np
+
 DOCKER_CONFIG_PATH = '/aaio/data/sub_config.yaml'
 
 def create_env(seed=None):
@@ -33,7 +27,7 @@ if __name__ == "__main__":
     import sys
     sys.path.append('submission')
     from agent import Agent
-    from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator, ListSampler
+    from a2c_ppo_acktr.aai_config_generator import ListSampler
     gen_config = ListSampler.create_from_dir("aai_resources/default_configs/")
     #gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/1-Food.yaml")
     agent = Agent('submission/data/sub_config.yaml')

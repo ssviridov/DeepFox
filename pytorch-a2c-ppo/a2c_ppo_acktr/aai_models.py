@@ -1,6 +1,6 @@
 from collections import OrderedDict
 
-from .model import CNNBase, NNBase, Bernoulli,\
+from a2c_ppo_acktr.model import CNNBase, NNBase, Bernoulli,\
     Categorical, DiagGaussian, MLPBase, Flatten, Policy
 import gym
 from torch import nn

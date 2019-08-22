@@ -1,26 +1,18 @@
-import copy
-import glob
 import os
 import time
 from collections import deque
 
-import gym
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.aai_arguments import get_args
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_models import AAIPolicy, AAIResnet, ImageVecMapBase
+from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMapBase
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
-from evaluate_aai import evaluate
-from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
-from datetime import datetime
+from a2c_ppo_acktr.aai_config_generator import ListSampler
 import json
 from tensorboardX import SummaryWriter
 
@@ -158,14 +150,14 @@ def main():
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
     gen_config = ListSampler.create_from_dir(args.config_dir)
-    gen_config = SingleConfigGenerator.from_file(
+    #gen_config = SingleConfigGenerator.from_file(
         #"aai_resources/test_configs/MySample2.yaml"
-        "aai_resources/default_configs/1-Food.yaml"
-    )
+    #    "aai_resources/default_configs/1-Food.yaml"
+    #)
 
     envs = make_vec_envs_aai(
         args.env_path, gen_config, args.seed, args.num_processes,
-        device,  grid_exploration=True, num_frame_stack=args.frame_stack,
+        device, num_frame_stack=args.frame_stack,
         headless=args.headless, image_only=len(args.extra_obs) == 0,
     )
 
@@ -261,8 +253,8 @@ def main():
                         episode_rewards.append(info['episode_reward'])
                         episode_success.append(info['episode_success'])
                         episode_len.append(info['episode_len'])
-                        if "exploration" in info:
-                            episode_visited.append(info["exploration"]["n_visited"])
+                        if "grid_oracle" in info:
+                            episode_visited.append(info["grid_oracle"]["n_visited"])
 
                 # If done then clean the history of observations.
                 masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done])
@@ -302,7 +294,7 @@ def main():
                 )
 
                 # save for every interval-th episode or for the last epoch
-            if len(episode_rewards):
+            if len(episode_rewards) == episode_rewards.maxlen:
                 model_saver.save_model(
                     curr_update, curr_steps,
                     np.mean(episode_rewards), actor_critic

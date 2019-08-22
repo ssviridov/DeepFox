@@ -1,6 +1,6 @@
 import torch
 from torch.utils.data.sampler import BatchSampler, SubsetRandomSampler
-from .storage import _flatten_helper, RolloutStorage
+from a2c_ppo_acktr.storage import _flatten_helper, RolloutStorage
 from typing import List
 import gym
 

@@ -4,13 +4,14 @@ from PIL import Image
 from gym.envs.classic_control.rendering import SimpleImageViewer
 import numpy as np
 import pyglet.window
-from a2c_ppo_acktr.aai_wrapper import AnimalAIWrapper, make_env_aai
+from a2c_ppo_acktr.aai_wrapper import make_env_aai
 from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator
 import cv2
 
 aai_path = "aai_resources/env/AnimalAI"
 aai_config_dir = "aai_resources/test_configs/" #"aai_resources/test_configs/"
 curr_config = aai_config_dir + "MySample.yaml" #"exampleConfig.yaml"
+
 
 class EnvInteractor(SimpleImageViewer):
     """
@@ -109,7 +110,6 @@ class EnvInteractor(SimpleImageViewer):
             last_time = time.time()
 
 
-
 def main():
     rank = np.random.randint(0, 1000)
     viewer = EnvInteractor()
@@ -137,10 +137,12 @@ def rotate(vec, angle):
     z1 = np.sin(betta) * x + np.cos(betta) * z
     return np.array([x1, y, z1])
 
+
 def concat_images(image, map_view):
     map_view = map_view[:3].transpose(1,2,0)*255
     map_view = cv2.resize(map_view, (84, 84))
     return np.concatenate((image, map_view), axis=1)
+
 
 def record_episode(seed, env, viewer, obs):
 
@@ -170,11 +172,11 @@ def record_episode(seed, env, viewer, obs):
               " speed=({:.2f}, {:.2f}, {:.2f}), n_visited={}, expl_r={}".format(
             total_steps[0], speed_reward,
             (angle+1)*360, x*70,z*70,y*70, dx*10,dz*10,dy*10,
-            info['exploration']['n_visited'], info['exploration']['r'] # rew
+            info['grid_oracle']['n_visited'], info['grid_oracle']['r'] # rew
         ), end="")
 
-        if info['exploration']['r'] > 0.0:
-            print("\nr={}".format(info['exploration']['r']))
+        #if info['grid_oracle']['r'] > 0.0:
+        #    print("\nr={}".format(info['grid_oracle']['r']))
 
         img = concat_images(obs['image'], obs['visited'])
         #print("VISITED:\n", obs['visited'][0])
@@ -193,6 +195,7 @@ def record_episode(seed, env, viewer, obs):
     viewer.run_loop(step)
 
     #viewer.run_loop(step)
+
 
 import copy
 def remove_cardbox2(config_dict):

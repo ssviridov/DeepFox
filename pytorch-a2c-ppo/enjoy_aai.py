@@ -9,10 +9,8 @@ from itertools import count
 import numpy as np
 import torch
 
-from a2c_ppo_acktr.envs import VecPyTorch, make_vec_envs
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
-from a2c_ppo_acktr.utils import get_render_func, get_vec_normalize
+from a2c_ppo_acktr.aai_config_generator import ListSampler
 
 sys.path.append('a2c_ppo_acktr')
 
@@ -88,7 +86,7 @@ env = make_vec_envs_aai(
     args.seed,
     1,
     device,
-    grid_exploration=False,
+    num_frame_stack=train_args.get('frame_stack', 1),
     headless=False,
     image_only= image_only
 )

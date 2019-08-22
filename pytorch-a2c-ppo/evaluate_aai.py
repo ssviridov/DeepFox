@@ -1,16 +1,15 @@
 import numpy as np
 import torch
 
-from a2c_ppo_acktr import utils
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
 
 
 def evaluate(actor_critic, env_path, gen_config, seed, num_processes,
-             device, grid_exploration, headless):
+             device, headless):
 
     envs = make_vec_envs_aai(
         env_path, gen_config, seed+num_processes+10, num_processes,
-        device, grid_exploration, headless=headless
+        device, headless=headless
     )
     #eval_envs = make_vec_envs_aai(
     #   env_name, seed + num_processes, num_processes,
