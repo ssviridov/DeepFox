@@ -186,7 +186,7 @@ def make_env_aai(env_path, config_generator, rank, headless=False,
         if not kwargs.get('image_only', True):
             env = GridOracle(
                 oracle_reward=2.5/100.,
-                penalty_mode=True,
+                penalty_mode=False,
                 trace_decay=0.999,
                 exploration_only=False
             ).wrap_env(env)

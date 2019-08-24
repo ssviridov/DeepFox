@@ -19,7 +19,7 @@ class Preprocessor(object):
                 env.reward_range,
                 env.metadata)
 
-    def reset(self, obs, **kwargs):
+    def reset(self, obs):
         raise NotImplementedError()
 
     def step(self,  act, obs, r, done, info):
@@ -137,7 +137,7 @@ class GridOracle(Preprocessor):
                 env.reward_range,
                 env.metadata)
 
-    def reset(self, obs, **kwargs):
+    def reset(self, obs):
         self._visited[:] = 0
         self._visited[self.start_x, self.start_y, self.start_z] = 1.
         self.num_visited = 1

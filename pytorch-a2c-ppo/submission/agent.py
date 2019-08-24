@@ -8,7 +8,7 @@ import torch as th
 import itertools as it
 import numpy as np
 DOCKER_CONFIG_PATH = '/aaio/data/sub_config.yaml'
-
+from a2c_ppo_acktr.preprocessors import GridOracle
 
 class ActionAdapter(object):
     def __init__(
@@ -45,21 +45,25 @@ class ObservationAdapter(object):
             frame_stack=1,
             image_only=True,
             transpose=True,
-            unsqueeze=True
+            unsqueeze=True,
+            stackables=(),
+            grid_oracle=None
     ):
         self.device = device
         self.image_only = image_only
         self.transpose = transpose
         self.unsqueeze = unsqueeze
         self.nstack = frame_stack
-        self.stacked_obs = defaultdict(lambda :deque(maxlen=nstack))
+        self.stacked_obs = defaultdict(lambda :deque(maxlen=self.nstack))
+        self.stackables = stackables
 
     def reset(self):
         self.stacked_obs.clear()
         self.angle = np.zeros((1,), dtype=np.float32)
         self.pos = np.zeros((3,), dtype=np.float32)
 
-    def __call__(self, obs, r, done, info, prev_action):
+    def __call__(self, prev_action, obs, r, done, info):
+
         if isinstance(obs, tuple):
             if self.image_only:
                 return self.to_torch(0, obs[0], True)
@@ -79,7 +83,8 @@ class ObservationAdapter(object):
             }
 
     def stack_vars(self, key, var):
-        if self.nstack == 1: return var
+        if key not in self.stackables or self.nstack == 1:
+            return var
 
         self.stacked_obs[key].append(var)
         while len(self.stacked_obs[key]) < self.nstack:
@@ -105,6 +110,12 @@ class ObservationAdapter(object):
 
 class ExtraObsAdapter(ObservationAdapter):
 
+    def __init__(self, *args, **kwargs):
+        self.grid_oracle = GridOracle(
+            **kwargs.pop("grid_oracle", {})
+        )
+        super(ExtraObsAdapter, self).__init__(*args, **kwargs)
+
     def _rotate_XZ(self, vec, angle):
         """rotates a vector on a given angle"""
         betta = np.radians(angle)
@@ -117,6 +128,9 @@ class ExtraObsAdapter(ObservationAdapter):
         super(ExtraObsAdapter, self).reset()
         self.angle = np.zeros((1,), dtype=np.float32)
         self.pos = np.zeros((3,), dtype=np.float32)
+        #yeah if we feed GridOracle with an empty obs nothing bad happens
+        #but future preprocessors could brake with this...
+        obs = self.grid_oracle.reset({})
 
     def _update_angle(self, action):
         if (action - 1) % 3 == 0: #TURN_RIGHT:
@@ -125,7 +139,7 @@ class ExtraObsAdapter(ObservationAdapter):
             self.angle[0] += 6
         self.angle[0] = self.angle[0] % 360
 
-    def __call__(self,  obs, r, done, info, prev_action):
+    def __call__(self, prev_action, obs, r, done, info):
         self._update_angle(prev_action)
         img = info['brain_info'].visual_observations[0][0]
         speed = info['brain_info'].vector_observations[0]
@@ -137,7 +151,12 @@ class ExtraObsAdapter(ObservationAdapter):
             "angle": self.angle / 180 - 1.,  # (0., 360.)/180 -1. --> (-1.,1.)
             "pos": self.pos / 70.  # (-700.,700.)/70. --> (-10.,10)
         }
-        return super(ExtraObsAdapter, self).__call__(obs, r, done, info, prev_action)
+        obs, r, done, info = self.grid_oracle.step(
+            prev_action, obs, r, done, info
+        )
+        return super(ExtraObsAdapter, self).__call__(
+            prev_action, obs, r, done, info
+        )
 
 
 def make_obs_adapter(**kwargs):
@@ -153,7 +172,6 @@ class Agent(object):
         """
          Load your agent here and initialize anything needed
         """
-
         # Load the configuration and model using ABSOLUTE PATHS
         self.eval_config_path = config_path
         with open(self.eval_config_path) as f:
@@ -230,7 +248,7 @@ class Agent(object):
                 self.batch_size = self._get_batch_size(reward)
                 self._start_episode(self.batch_size)
 
-            obs = self.adapt_obs(obs, reward, done, info, self.prev_action)
+            obs = self.adapt_obs(self.prev_action, obs, reward, done, info)
 
             _, action, _, self.rnn_state = self.model.act(
                 obs, self.rnn_state,

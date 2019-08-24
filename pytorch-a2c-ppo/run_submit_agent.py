@@ -20,28 +20,49 @@ def create_env(seed=None):
     )
     return env
 
+def get_next_config(gen_config):
+    config_dict = gen_config.next_config()
+    name = config_dict['config_name'][:-5]  # no .yaml suffix
+    config = config_dict['config']
+    if name[-1].isdigit():
+        name = name[:-1]  # different instances of one env type have a digit at the end
+    return config, name
+
+def recursive_fill(stats, info):
+    for k, v in info.items():
+        if isinstance(v, dict):
+            k_info = v
+            k_stats = stats.setdefault(k, {})
+            recursive_fill(k_stats, k_info)
+        else:
+            stats.setdefault(k, []).append(v)
 
 if __name__ == "__main__":
     import random as rnd
     import itertools as it
     import sys
+    from collections import defaultdict
+
     sys.path.append('submission')
     from agent import Agent
-    from a2c_ppo_acktr.aai_config_generator import ListSampler
-    gen_config = ListSampler.create_from_dir("aai_resources/default_configs/")
-    #gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/1-Food.yaml")
+    from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
+    #gen_config = ListSampler.create_from_dir("aai_resources/default_configs/")
+    gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/1-Food.yaml")
     agent = Agent('submission/data/sub_config.yaml')
     env = create_env()
 
     #config = gen_config.next_config()
     #print("config name:", config['config_name'])
     #obs = env.reset(config['config'])
-    obs = env.reset()
+    #obs = env.reset()
+    stats = {}
 
     print('Running 5 episodes')
     for k in range(5):
         cumulated_reward = 0
-        print('Episode {} starting'.format(k))
+        config, name = get_next_config(gen_config)
+        print('Episode {} starting: {}'.format(k, name))
+        env.reset(config)
         try:
             agent.reset()
             #obs: tuple(84,84,3),(3,), reward: int, done: bool, info: dict{"brain_info":..., ..}
@@ -57,9 +78,17 @@ if __name__ == "__main__":
             print('Episode {} failed'.format(k))
             raise e
 
+        recursive_fill(stats, info)
+
         print(
             'Episode {0} completed, reward {1:0.2f}, num_steps {2}'.format(
                 k, cumulated_reward, step
-            ))
+        ))
+        #print('R_stat: {.2f}, num_steps: {}, success: {}'.format(
+        #   stats['episode_reward'][-1],
+        #   stats['episode_len'][-1],
+        #   stats['episode_success'][-1],
+        #))
+
 
     print('SUCCESS')
