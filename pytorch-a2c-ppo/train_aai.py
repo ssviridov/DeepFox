@@ -297,7 +297,7 @@ def main():
             if len(episode_rewards) == episode_rewards.maxlen:
                 model_saver.save_model(
                     curr_update, curr_steps,
-                    np.mean(episode_rewards), actor_critic
+                    np.mean(episode_success), actor_critic
                 )
 
     finally:
