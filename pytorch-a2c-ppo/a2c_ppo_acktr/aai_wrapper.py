@@ -17,7 +17,7 @@ from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from a2c_ppo_acktr.envs import TransposeImage, VecPyTorch, VecPyTorchFrameStack, VecPyTorchFrameStackDictObs, ShmemVecEnv
 from .aai_config_generator import SingleConfigGenerator
 from .aai_env_fixed import UnityEnvHeadless
-from .preprocessors import GridOracle
+from .preprocessors import GridOracle, GridOracleWithAngles
 
 import torch
 
@@ -112,7 +112,7 @@ class AnimalAIWrapper(gym.Env):
         return {
             "image":img,
             "speed":absolute_speed /10., #(-21.,21.)/10. --> (-2.1,2.1)
-            "angle":self.angle/180 -1., #(0., 360.)/180 -1. --> (-1.,1.)
+            "angle":self.angle/180 - 1., #(0., 360.)/180 -1. --> (-1.,1.)
             "pos":self.pos/70. #(-700.,700.)/70. --> (-10.,10)
         }
 
@@ -177,34 +177,52 @@ class AnimalAIWrapper(gym.Env):
         self.env.close()
 
 
-def make_env_aai(env_path, config_generator, rank, headless=False,
+def make_env_aai(env_path, config_generator, rank,
+                 headless=False,
+                 grid_oracle_kwargs=None,
                  **kwargs):
 
     def _thunk():
+
         env = AnimalAIWrapper(env_path, rank, config_generator, headless=headless, **kwargs)
 
         if not kwargs.get('image_only', True):
-            env = GridOracle(
-                oracle_reward=2.5/100.,
-                penalty_mode=False,
-                trace_decay=0.999,
-                exploration_only=False
-            ).wrap_env(env)
+            assert grid_oracle_kwargs is not None, \
+                "If image_only==False, then we need grid oracle kwargs!"
+            oracle_args = grid_oracle_kwargs.copy()
+            oracle_type = oracle_args.pop('oracle_type')
+            if oracle_type == "angles":
+                # oracle_reward=1./100., penalty_mode=False,
+                # trace_decay=1., exploration_only=False, num_angles=6
+                env = GridOracleWithAngles(
+                    **oracle_args
+                ).wrap_env(env)
+            elif oracle_type == "3d":
+                # oracle_reward=2.5/100., penalty_mode=True,
+                # trace_decay=0.999, exploration_only=False
+                env = GridOracle(
+                    **oracle_args,
+                ).wrap_env(env)
+            else:
+                raise NotImplementedError("Only '3d' or 'angles' types for GridOracle")
 
         return env
 
     return _thunk
 
-def make_vec_envs_aai(env_path, config_generator, seed, num_processes, device,
-                      num_frame_stack=None, headless=False, **env_kwargs):
+def make_vec_envs_aai(
+        env_path, config_generator, seed, num_processes,
+        device, num_frame_stack=None, headless=False,
+        grid_oracle_kwargs=None, **env_kwargs):
 
     envs = [make_env_aai(env_path, config_generator, i+seed,
-                         headless=headless, **env_kwargs)
+                         headless, grid_oracle_kwargs, **env_kwargs)
             for i in range(num_processes)]
 
     if len(envs) > 2:
-        make_test = make_env_aai(env_path, config_generator, seed+num_processes+1,
-                                 headless=headless, **env_kwargs)
+        make_test = make_env_aai(env_path, config_generator,
+                                 seed+num_processes+1, headless,
+                                 grid_oracle_kwargs,**env_kwargs)
         test_env = make_test()
         spaces = (test_env.observation_space, test_env.action_space)
         print(test_env.observation_space, test_env.action_space)

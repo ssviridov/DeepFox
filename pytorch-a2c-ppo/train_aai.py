@@ -141,11 +141,6 @@ def main():
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
 
-    log_dir = os.path.expanduser(args.log_dir)
-    eval_log_dir = log_dir + "_eval"
-    utils.cleanup_log_dir(log_dir)
-    utils.cleanup_log_dir(eval_log_dir)
-
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
@@ -158,7 +153,12 @@ def main():
     envs = make_vec_envs_aai(
         args.env_path, gen_config, args.seed, args.num_processes,
         device, num_frame_stack=args.frame_stack,
-        headless=args.headless, image_only=len(args.extra_obs) == 0,
+        headless=args.headless,
+        grid_oracle_kwargs=dict(
+            oracle_type=args.oracle_type,
+            oracle_reward=args.oracle_reward
+        ),
+        image_only=len(args.extra_obs) == 0,
     )
 
     actor_critic = AAIPolicy(
@@ -299,12 +299,6 @@ def main():
                     curr_update, curr_steps,
                     np.mean(episode_rewards), actor_critic
                 )
-
-            if (args.eval_interval is not None and len(episode_rewards) > 1
-                    and curr_update % args.eval_interval == 0):
-                raise NotImplementedError("evaluation doen't work because we can't close opened envs")
-            #    evaluate(actor_critic, args.env_path, test_gen_config, args.seed,
-            #             args.num_processes, eval_log_dir, device, args.headless)
 
     finally:
         if summary: summary.close()

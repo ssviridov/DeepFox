@@ -29,6 +29,14 @@ def get_args():
         '-fs', '--frame-stack', type=int, default=2,
         help="Number of image frames to stack into agent's observation, (default: 2)",
     )
+    parser.add_argument(
+        "--oracle-type", '-ot', default="angles", choices=("3d", "angles"),
+        help="Which GridOracle you want to use, hint: use angles"
+    )
+    parser.add_argument(
+        "--oracle-reward", "-or", default=0., type=float,
+        help="A size of !penalty! that agent gets for staying at same location"
+        )
     #PPO/A2C arguments:
     parser.add_argument(
         '--algo', default='a2c', help='algorithm to use: a2c | ppo | acktr')
@@ -126,10 +134,7 @@ def get_args():
         type=int,
         default=10e6,
         help='number of environment steps to train (default: 10e6)')
-    parser.add_argument(
-        '--log-dir',
-        default='/tmp/gym/',
-        help='directory to save agent logs (default: /tmp/gym)')
+
     parser.add_argument(
         '-sd', '--save-dir',
         default='./trained_models/',

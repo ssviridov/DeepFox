@@ -28,7 +28,7 @@ def main():
 
     env = AnimalAIEnv(
         environment_filename='/aaio/test/env/AnimalAI',
-        seed=15,
+        seed=3,
         retro=False,
         n_arenas=1,
         worker_id=1,
@@ -54,7 +54,7 @@ def main():
         except Exception as e:
             print('Episode {} failed'.format(k))
             raise e
-        print('Episode {0} completed, reward {1}'.format(k, cumulated_reward))
+        print('Episode {0} completed, reward {1}, num_steps {2}'.format(k, cumulated_reward, i))
 
     print('SUCCESS')
 

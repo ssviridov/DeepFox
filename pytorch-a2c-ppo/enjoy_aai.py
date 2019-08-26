@@ -77,8 +77,13 @@ train_args = load_args(os.path.dirname(args.model_path))
 
 if(train_args):
     image_only = len(train_args.get('extra_obs',[])) == 0
+    oracle_kwargs = dict(
+        oracle_type=train_args.get("oracle_type","angles"),
+        oracle_reward=train_args.get("oracle_rewards", 1./100.)
+    )
 else:
     image_only = True
+    oracle_kwargs = dict()
 
 env = make_vec_envs_aai(
     args.env_path,
@@ -88,7 +93,8 @@ env = make_vec_envs_aai(
     device,
     num_frame_stack=train_args.get('frame_stack', 1),
     headless=False,
-    image_only= image_only
+    grid_oracle_kwargs=oracle_kwargs,
+    image_only=image_only
 )
 
 # We need to use the same statistics for normalization as used in training

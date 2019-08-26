@@ -8,7 +8,7 @@ import torch as th
 import itertools as it
 import numpy as np
 DOCKER_CONFIG_PATH = '/aaio/data/sub_config.yaml'
-from a2c_ppo_acktr.preprocessors import GridOracle
+from a2c_ppo_acktr.preprocessors import GridOracle, GridOracleWithAngles
 
 class ActionAdapter(object):
     def __init__(
@@ -111,9 +111,20 @@ class ObservationAdapter(object):
 class ExtraObsAdapter(ObservationAdapter):
 
     def __init__(self, *args, **kwargs):
-        self.grid_oracle = GridOracle(
-            **kwargs.pop("grid_oracle", {})
-        )
+        oracle_args = kwargs.pop("grid_oracle", {})
+        oracle_type = oracle_args.pop("oracle_type")
+
+        if oracle_type == "angles":
+            self.grid_oracle = GridOracleWithAngles(
+                **oracle_args
+            )
+        elif oracle_type == "3d":
+            self.grid_oracle = GridOracle(
+                **oracle_args
+            )
+        else:
+            raise NotImplementedError()
+
         super(ExtraObsAdapter, self).__init__(*args, **kwargs)
 
     def _rotate_XZ(self, vec, angle):

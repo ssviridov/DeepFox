@@ -114,7 +114,16 @@ def main():
     rank = np.random.randint(0, 1000)
     viewer = EnvInteractor()
     gen_config = SingleConfigGenerator.from_file(curr_config)
-    make = make_env_aai(aai_path,gen_config, rank, True, channel_first=False, image_only=False)
+    make = make_env_aai(
+        aai_path, gen_config, rank, False,
+        grid_oracle_kwargs=dict(
+            oracle_type="angles",
+            trace_decay=1.,# 0.9999,
+            num_angles=3
+        ),
+        channel_first=False,
+        image_only=False
+    )
     env = make()
     #env = AnimalAIWrapper(
     #    aai_path, rank, gen_config, channel_first=False, image_only=False,
@@ -143,6 +152,8 @@ def concat_images(image, map_view):
     map_view = cv2.resize(map_view, (84, 84))
     return np.concatenate((image, map_view), axis=1)
 
+def angle360(obs):
+    return (obs['angle'][0]+1.)*180.
 
 def record_episode(seed, env, viewer, obs):
 
@@ -151,9 +162,12 @@ def record_episode(seed, env, viewer, obs):
     avg_speed = np.zeros(3)
     coef = 0.92
     total_steps = [0]
-    actions = [0]*100 +  [1]*15 + [0]*10 + [1]*15 + [0]*10 + [1]*15 + [0]*10 + [1]*15 + [0]*5000
-    map_window = SimpleImageViewer(400)
+    actions =  [1]*800 #[0]*100 +  [1]*15 + [0]*10 + [1]*15 + [0]*10 + [1]*15 + [0]*10 + [1]*15 + [0]*5000
+    #map_window = SimpleImageViewer(400)
+    #print("Step #0 angle: {:.1f}".format(angle360(obs)))
+
     def step(action):
+        #action = actions[total_steps[0]]
         action_log.append(action)
 
         obs, rew, done, info = env.step(action) #actions[total_steps[0]])
@@ -168,10 +182,11 @@ def record_episode(seed, env, viewer, obs):
         total_steps[0] += 1
 
         time.sleep(0.025)
+
         print("\rstep#{} speed_r={:0.4f} angle={:.1f}, pos=({:.2f}, {:.2f}, {:.2f}),"
               " speed=({:.2f}, {:.2f}, {:.2f}), n_visited={}, expl_r={}".format(
             total_steps[0], speed_reward,
-            (angle+1)*360, x*70,z*70,y*70, dx*10,dz*10,dy*10,
+            (angle+1.)*180, x*70,z*70,y*70, dx*10,dz*10,dy*10,
             info['grid_oracle']['n_visited'], info['grid_oracle']['r'] # rew
         ), end="")
 

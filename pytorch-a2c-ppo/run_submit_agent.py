@@ -49,7 +49,7 @@ if __name__ == "__main__":
     #gen_config = ListSampler.create_from_dir("aai_resources/default_configs/")
     gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/1-Food.yaml")
     agent = Agent('submission/data/sub_config.yaml')
-    env = create_env()
+    env = create_env(3)
 
     #config = gen_config.next_config()
     #print("config name:", config['config_name'])
