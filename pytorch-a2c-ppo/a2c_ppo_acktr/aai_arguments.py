@@ -150,10 +150,11 @@ def get_args():
         default=False,
         help='compute returns taking into account time limits')
     parser.add_argument(
-        '-rnn','--recurrent-policy',
-        action='store_true',
-        default=False,
-        help='use a recurrent policy')
+        '-pol','--policy',
+        choices=('rnn', 'ff', 'mha'),
+        default="ff",
+        help='Choose policy: feedforward, recurrent, or based on multihead attention!'
+    )
     parser.add_argument(
         '--use-linear-lr-decay',
         action='store_true',
@@ -164,7 +165,7 @@ def get_args():
     args.cuda = not args.no_cuda and torch.cuda.is_available()
 
     assert args.algo in ['a2c', 'ppo', 'acktr']
-    if args.recurrent_policy:
+    if args.policy == 'rnn':
         assert args.algo in ['a2c', 'ppo'], \
             'Recurrent policy is not implemented for ACKTR'
 

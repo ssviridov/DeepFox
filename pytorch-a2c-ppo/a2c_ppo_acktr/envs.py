@@ -304,3 +304,107 @@ class VecPyTorchFrameStackDictObs(VecEnvWrapper):
 
     def close(self):
         self.venv.close()
+
+class VecHistoryFrameStack(VecEnvWrapper):
+
+    def _stack_space(self, obs_space):
+        assert isinstance(obs_space, Box), "Only Box spaces here!"
+        low = np.repeat(
+            obs_space.low[np.newaxis,:], self.nstack, axis=0
+        )
+        high = np.repeat(
+            obs_space.high[np.newaxis,:], self.nstack, axis=0
+        )
+
+        return gym.spaces.Box(
+            low=low,
+            high=high,
+            dtype=obs_space.dtype
+        )
+
+    def _update_obs_space(self, obs_space):
+        if isinstance(obs_space, gym.spaces.Dict):
+            spaces = {k:self._stack_space(s)
+                for k,s in obs_space.spaces.items()}
+            return gym.spaces.Dict(spaces)
+        else:
+            return self._stack_space(obs_space)
+
+    def _create_stacked_obs(self, obs_space):
+
+        def stacked_t(sp):
+            shape = (self.venv.num_envs,) + sp.low.shape
+            return torch.zeros(shape).to(self.device)
+
+        if self.is_dict_obs:
+            stacked = {k:stacked_t(s)
+                       for k, s in obs_space.spaces.items()}
+        else:
+            stacked = stacked_t(obs_space)
+        return stacked
+
+    def __init__(self, venv, nstack, device=None):
+        self.venv = venv
+        self.nstack = nstack
+        self.device = torch.device('cpu') \
+            if device is None else torch.device(device)
+        self.is_dict_obs = isinstance(
+            venv.observation_space, gym.spaces.Dict
+        )
+
+        obs_space = self._update_obs_space(venv.observation_space)
+        self.buff = self._create_stacked_obs(obs_space)
+        VecEnvWrapper.__init__(self, venv, obs_space)
+
+    def shift_buff_back(self):
+        if self.is_dict_obs:
+            for k, v in self.buff.items():
+                v[:,:-1] = v[:,1:]
+        else:
+            self.buff[:,:-1] = self.buff[:,1:]
+
+    def zero_buff(self, dones):
+        dones = dones.tolist()
+        if self.is_dict_obs:
+            for k, v in self.buff.items():
+                v[dones] = 0.
+        else:
+            self.buff[dones] = 0.
+
+    def fill_last(self, obs):
+        if self.is_dict_obs:
+            for k, v in self.buff.items():
+                v[:,-1] = obs[k]
+        else:
+            self.buff[:,-1] = obs
+
+    def step_wait(self):
+        obs, rews, dones, infos = self.venv.step_wait()
+        # buffer shifted one step back,
+        # i.e. obs[:,i] becomes obs[:,i-1]
+        self.shift_buff_back()
+        self.zero_buff(dones)
+        self.fill_last(obs)
+        return self.buff, rews, dones, infos
+
+    def all_zero(self):
+        if self.is_dict_obs:
+            for k, v in self.buff.items():
+                v.zero_()
+        else:
+            self.buff.zero_()
+
+    def reset(self):
+        obs = self.venv.reset()
+        if torch.backends.cudnn.deterministic:
+            self.buff = self._create_stacked_obs(
+                obs_space=self.observation_space
+            )
+        else:
+            self.all_zero()
+
+        self.fill_last(obs)
+        return self.buff
+
+    def close(self):
+        self.venv.close()

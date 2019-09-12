@@ -6,6 +6,8 @@ import gym
 from torch import nn
 import torch as th
 from a2c_ppo_acktr.utils import init, conv_output_shape
+import numpy as np
+from .aai_layers import NaiveHistoryAttention
 
 class AAIPolicy(Policy):
     def __init__(self, obs_space, action_space, base=None, base_kwargs=None):
@@ -130,7 +132,7 @@ class ImageVecMapBase(NNBase):
             self,
             obs_space,
             extra_obs=None,
-            recurrent=False,
+            policy="ff",
             hidden_size=512,
             extra_encoder_dim=512,
             image_encoder_dim=512,
@@ -140,11 +142,12 @@ class ImageVecMapBase(NNBase):
         self._extra_encoder_dim = extra_encoder_dim if extra_obs else 0
         self._total_encoder_dim = self._image_encoder_dim + self._extra_encoder_dim
         # if recurrent is False there will be no layer after encoders ouputs:
-        self._hidden_size = hidden_size if recurrent else self._total_encoder_dim
+        self._hidden_size = hidden_size if policy!='ff' else self._total_encoder_dim
         self._extra_obs = extra_obs
+        self._policy_type = policy
 
         super(ImageVecMapBase, self).__init__(
-            recurrent,
+            policy=='rnn',
             self._total_encoder_dim,
             self._hidden_size
         )
@@ -172,7 +175,7 @@ class ImageVecMapBase(NNBase):
         self.critic_linear = init_(nn.Linear(self._hidden_size, 1))
 
     def _create_image_encoder(self):
-        num_channels = self.obs_shapes['image'][0]
+        num_channels = self.obs_shapes['image'][-3]
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), nn.init.calculate_gain('relu'))
 
@@ -184,7 +187,7 @@ class ImageVecMapBase(NNBase):
         )
 
     def _create_map_encoder(self):
-        num_channels, H, W = self.obs_shapes['visited']
+        num_channels, H, W = self.obs_shapes['visited'][-3:]
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), nn.init.calculate_gain('relu'))
 
@@ -199,13 +202,17 @@ class ImageVecMapBase(NNBase):
         input_features = 0
         if 'visited' in self._extra_obs:
             self._create_map_encoder()
-            input_features += conv_output_shape(self.obs_shapes['visited'], self.map_encoder)[0]
+            input_features += conv_output_shape(
+                self.obs_shapes['visited'][-3:],
+                self.map_encoder
+            )[0]
         else:
             self.map_encoder = None
-
-        self._vector_obs = [k for k in self._extra_obs if len(self.obs_shapes[k]) == 1]
+        # all images has at least 3 dims,
+        # vectors would have 2(if stacked along time) or 1
+        self._vector_obs = [k for k in self._extra_obs if len(self.obs_shapes[k]) < 3]
         for k in self._vector_obs:
-            input_features += self.obs_shapes[k][0]
+            input_features += self.obs_shapes[k][-1]
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), nn.init.calculate_gain('relu'))
@@ -233,6 +240,69 @@ class ImageVecMapBase(NNBase):
 
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        return self.critic_linear(x), x, rnn_hxs
+
+
+class AttentionIVM(ImageVecMapBase):
+
+    def __init__(
+            self,
+            obs_space,
+            extra_obs=None,
+            policy="mha",
+            hidden_size=None,
+            extra_encoder_dim=512,
+            image_encoder_dim=512,
+    ):
+        assert hidden_size is None, "hidden_size=(extra_encoder_dim+image_encoder_dim)*2"
+
+        super(AttentionIVM, self).__init__(
+            obs_space,
+            extra_obs,
+            policy,
+            (extra_encoder_dim+image_encoder_dim)*2,
+            extra_encoder_dim,
+            image_encoder_dim,
+        )
+        self.attention_layer = NaiveHistoryAttention(self._total_encoder_dim, 4)
+
+
+    def _flatten_batch(self, input):
+        batch_shapes = {}
+        flatten_input = {}
+        for k,v in input.items():
+            n_data_dims =  1 if k in self._vector_obs else 3
+            data_shape = v.shape[-n_data_dims:]
+            batch_shapes[k] = v.shape[:-n_data_dims]
+            flatten_input[k] = v.view(-1, *data_shape)
+
+        return flatten_input, batch_shapes
+
+    def _unflatten_batch(self, batch_dict, flatten_shapes):
+        unflatten = {}
+        for k, v in batch_dict.items():
+            batch_shape = flatten_shapes[k]
+            dim_prod, *data_shape = v.shape
+            assert dim_prod == np.prod(flatten_shapes[k]), "Error during flattening a batch!"
+            unflatten[k] = v.view(*batch_shape, *data_shape)
+        return unflatten
+
+    def forward(self, input, rnn_hxs, masks, **kwargs):
+        flatten_input, batch_shapes = self._flatten_batch(input)
+        batch_shape = batch_shapes['image']
+
+        if self._image_only_obs:
+            x = self.image_encoder(flatten_input / 255.0)
+        else:
+            x_img = self.image_encoder(flatten_input['image'] / 255.0)
+            x_extra = self.extra_encoder(flatten_input)
+            x = th.cat([x_img, x_extra], dim=1)
+
+        assert not self.is_recurrent, "no RRN in my multi-head-attention network!"
+
+        x = x.view(*batch_shape, *x.shape[1:])
+        x = self.attention_layer(x)
 
         return self.critic_linear(x), x, rnn_hxs
 

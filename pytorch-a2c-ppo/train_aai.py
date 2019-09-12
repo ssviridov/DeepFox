@@ -8,17 +8,14 @@ import torch
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.aai_arguments import get_args
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMapBase
+from a2c_ppo_acktr.aai_models import AAIPolicy, \
+    ImageVecMapBase, AttentionIVM
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
-from a2c_ppo_acktr.aai_config_generator import ListSampler
+from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
 import json
 from tensorboardX import SummaryWriter
-
-
-#def curr_day():
-#    return datetime.now().strftime("%y_%m_%d")
 
 
 def ensure_dir(file_path):
@@ -60,8 +57,7 @@ class DummySaver(object):
     def _build_save_path(self, args):
 
         sub_folder = "{}-{}-{}".format(
-            args.algo,
-            "rnn" if args.recurrent_policy else "ff",
+            args.algo, args.policy,
             "extra-obs" if args.extra_obs else "pure"
         )
         save_subdir = os.path.join(args.save_dir, sub_folder)
@@ -145,10 +141,10 @@ def main():
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
     gen_config = ListSampler.create_from_dir(args.config_dir)
-    #gen_config = SingleConfigGenerator.from_file(
+    gen_config = SingleConfigGenerator.from_file(
         #"aai_resources/test_configs/MySample2.yaml"
-    #    "aai_resources/default_configs/1-Food.yaml"
-    #)
+        "aai_resources/default_configs/1-Food.yaml"
+    )
 
     envs = make_vec_envs_aai(
         args.env_path, gen_config, args.seed, args.num_processes,
@@ -164,13 +160,13 @@ def main():
     actor_critic = AAIPolicy(
         envs.observation_space,
         envs.action_space,
-        base=ImageVecMapBase,
+        base=AttentionIVM,
         base_kwargs={
-            'recurrent': args.recurrent_policy,
+            'policy': args.policy,
             'extra_obs': args.extra_obs,
-            'hidden_size':512,
+            'hidden_size':None,
             'extra_encoder_dim':256,
-            'image_encoder_dim':512,
+            'image_encoder_dim':256,
         #    'freeze_resnet':True,
         }
     )
@@ -244,27 +240,27 @@ def main():
                         obs, #rollouts.obs[step],
                         rollouts.recurrent_hidden_states[step],
                         rollouts.masks[step])
+                    #/no_grad
+                    # Obser reward and next obs
+                    obs, reward, done, infos = envs.step(action)
 
-                # Obser reward and next obs
-                obs, reward, done, infos = envs.step(action)
+                    for info in infos:
+                        if 'episode_reward' in info.keys():
+                            episode_rewards.append(info['episode_reward'])
+                            episode_success.append(info['episode_success'])
+                            episode_len.append(info['episode_len'])
+                            if "grid_oracle" in info:
+                                episode_visited.append(info["grid_oracle"]["n_visited"])
 
-                for info in infos:
-                    if 'episode_reward' in info.keys():
-                        episode_rewards.append(info['episode_reward'])
-                        episode_success.append(info['episode_success'])
-                        episode_len.append(info['episode_len'])
-                        if "grid_oracle" in info:
-                            episode_visited.append(info["grid_oracle"]["n_visited"])
+                    # If done then clean the history of observations.
+                    masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done])
+                    bad_masks = torch.tensor(
+                        [[0.0] if 'bad_transition' in info.keys() else [1.0]
+                         for info in infos]
+                    )
 
-                # If done then clean the history of observations.
-                masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done])
-                bad_masks = torch.tensor(
-                    [[0.0] if 'bad_transition' in info.keys() else [1.0]
-                     for info in infos]
-                )
-
-                rollouts.insert(obs, recurrent_hidden_states, action,
-                                action_log_prob, value, reward, masks, bad_masks)
+                    rollouts.insert(obs, recurrent_hidden_states, action,
+                                    action_log_prob, value, reward, masks, bad_masks)
 
             with torch.no_grad():
     #            assert torch.equal(obs['image'], rollouts.obs[-1].asdict()['image']), 'woy!! this is strange!'
