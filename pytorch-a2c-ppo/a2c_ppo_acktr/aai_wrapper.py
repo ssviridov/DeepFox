@@ -42,17 +42,17 @@ class AnimalAIWrapper(gym.Env):
         self.image_only=image_only
         self.channel_first = channel_first
 
-        self._set_config(self.config_generator.next_config())
         #change UnityEnvHeadless to UnityEnvironment and remove headless arg
         # if you want to return to the animalai version of environemt
         #self.env = UnityEnvironment(
         self.env = UnityEnvHeadless( #
             file_name=env_path, worker_id=rank,
             seed=rank, n_arenas=1,
-            arenas_configurations=self.config,
+            arenas_configurations=None, #self.config,
             docker_training=docker_training,
             headless=headless
         )
+        #self._set_config(self.config_generator.next_config())
 
         lookup_func = lambda a: {'Learner':np.array([a], dtype=float)}
         #if reduced_actions:
@@ -69,7 +69,7 @@ class AnimalAIWrapper(gym.Env):
         self.pos = np.zeros((3,), dtype=np.float32)
         self.angle = np.zeros((1,), dtype=np.float32)
 
-        print("Time limit: ", self.time_limit)
+        #print("Time limit: ", self.time_limit)
 
     def _make_obs_space(self):
         img_shape = (3,84,84) if self.channel_first else (84,84,3)

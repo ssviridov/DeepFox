@@ -12,14 +12,9 @@ from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMapBase
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
-from a2c_ppo_acktr.aai_config_generator import ListSampler
+from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
 import json
 from tensorboardX import SummaryWriter
-
-
-#def curr_day():
-#    return datetime.now().strftime("%y_%m_%d")
-
 
 def ensure_dir(file_path):
     """
@@ -146,6 +141,7 @@ def main():
 
     gen_config = ListSampler.create_from_dir(args.config_dir)
     #gen_config = SingleConfigGenerator.from_file(
+    #    "aai_resources/new_configs/avoidance/chess_red.yaml"
         #"aai_resources/test_configs/MySample2.yaml"
     #    "aai_resources/default_configs/1-Food.yaml"
     #)
@@ -156,7 +152,8 @@ def main():
         headless=args.headless,
         grid_oracle_kwargs=dict(
             oracle_type=args.oracle_type,
-            oracle_reward=args.oracle_reward
+            oracle_reward=args.oracle_reward,
+            num_angles=20, cell_side=2.,#TODO: move these to commandline arguments
         ),
         image_only=len(args.extra_obs) == 0,
     )
@@ -247,7 +244,6 @@ def main():
 
                 # Obser reward and next obs
                 obs, reward, done, infos = envs.step(action)
-
                 for info in infos:
                     if 'episode_reward' in info.keys():
                         episode_rewards.append(info['episode_reward'])
