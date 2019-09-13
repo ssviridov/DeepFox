@@ -1,15 +1,15 @@
 !ArenaConfig
 arenas:
   0: !Arena
-    t: 250
+    t: 500
     items:
     - !Item
-      name: GoodGoalBounce
+      name: GoodGoal
     - !Item
       name: GoodGoalMultiBounce
     - !Item
-      name: GoodGoalMultiBounce
+      name: GoodGoalMulti
     - !Item
-      name: BadGoalBounce
+      name: BadGoal
     - !Item
       name: BadGoalBounce

@@ -6,11 +6,11 @@ arenas:
     - !Item
       name: GoodGoalBounce
     - !Item
-      name: GoodGoalBounce
+      name: GoodGoal
       sizes:
         - !Vector3 {x: 5., y: 5., z: 5.}
         - !Vector3 {x: 0.5, y: 0.5, z: 0.5}
     - !Item
-      name: BadGoalBounce
+      name: BadGoal
     - !Item
       name: BadGoalBounce

@@ -9,8 +9,8 @@ from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator
 import cv2
 
 aai_path = "aai_resources/env/AnimalAI"
-aai_config_dir = "aai_resources/new_configs/test/" #"aai_resources/test_configs/"
-curr_config = aai_config_dir + "empty_yellow.yaml" #"exampleConfig.yaml"
+aai_config_dir = "aai_resources/new_configs/avoidance/center_red/" #"aai_resources/test_configs/"
+curr_config = aai_config_dir + "left_wall.yaml" #"exampleConfig.yaml"
 
 
 class EnvInteractor(SimpleImageViewer):
