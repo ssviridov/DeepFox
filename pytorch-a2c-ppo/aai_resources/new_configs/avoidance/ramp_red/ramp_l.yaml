@@ -9,15 +9,23 @@ arenas:
       positions:
       - !Vector3 {x: 20, y: 0, z: 20}
       sizes:
-      - !Vector3 {x: 24., y: 0, z: 24.}
+      - !Vector3 {x: 40., y: 0, z: 18.}
+    - !Item
+      name: Ramp
+      rotations: [180]
+      sizes:
+        - !Vector3 {x: 8, y: 4, z: 20}
+      positions:
+        - !Vector3 {x: -1, y: 0, z: 20}
+      colors:
+        - !RGB {r: 255, g: 0, b: 255}
     - !Item
       name: GoodGoal
       positions:
       - !Vector3 {x: -1, y: 0, z: 36.}
       - !Vector3 {x: -1, y: 0, z: 33.}
       sizes:
-      - !Vector3 {x: 2, y: 2, z: 2}
-      - !Vector3 {x: 4, y: 4, z: 4}
+      - !Vector3 {x: 2.2, y: 2.2, z: 2.2}
     - !Item
       name: Agent
       positions:
@@ -25,16 +33,16 @@ arenas:
     - !Item
       name: Wall
       positions:
-      - !Vector3 {x: 4, y: 0, z: 20}
+      - !Vector3 {x: 4, y: 0, z: -1}
       sizes:
       - !Vector3 {x: 8., y: 5., z: 5.}
       rotations: [0]
     - !Item
       name: Cardbox1
       positions:
-        - !Vector3 {x: 36, y: 0, z: 20}
+        - !Vector3 {x: -1, y: 0, z: 20}
       sizes:
-        - !Vector3 {x: 8., y: -1, z: 1.2}
+        - !Vector3 {x: 6., y: -1, z: 1.2}
       rotations: [0]
     - !Item
       name: Cardbox2
@@ -47,4 +55,4 @@ arenas:
       positions:
       - !Vector3 {x: -1, y: 0, z: 2}
       sizes:
-      - !Vector3 {x: 2, y: -1, z: 3}
+      - !Vector3 {x: 2, y: -1, z: 4}

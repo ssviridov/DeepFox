@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_config_generator import ListSampler
+from a2c_ppo_acktr.aai_config_generator import ListSampler, HierarchicalSampler
 
 sys.path.append('a2c_ppo_acktr')
 
@@ -70,7 +70,7 @@ if args.seed is None:
     args.seed = np.random.randint(1000)
 
 device = torch.device("cuda:0" if args.cuda else "cpu")
-gen_config = ListSampler.create_from_dir(args.config_dir)
+gen_config = HierarchicalSampler.create_from_dir(args.config_dir)
 #gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/allObjectsRandom1.yaml")
 
 train_args = load_args(os.path.dirname(args.model_path))
@@ -79,7 +79,9 @@ if(train_args):
     image_only = len(train_args.get('extra_obs',[])) == 0
     oracle_kwargs = dict(
         oracle_type=train_args.get("oracle_type","angles"),
-        oracle_reward=train_args.get("oracle_rewards", 1./100.)
+        oracle_reward=train_args.get("oracle_rewards", 1./100.),
+        cell_side=2.,
+        num_angles=20,
     )
 else:
     image_only = True

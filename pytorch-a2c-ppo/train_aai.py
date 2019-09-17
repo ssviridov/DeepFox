@@ -12,7 +12,7 @@ from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMapBase
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
-from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
+from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator, HierarchicalSampler
 import json
 from tensorboardX import SummaryWriter
 
@@ -139,7 +139,8 @@ def main():
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
-    gen_config = ListSampler.create_from_dir(args.config_dir)
+    gen_config = HierarchicalSampler\
+        .create_from_dir(args.config_dir)
     #gen_config = SingleConfigGenerator.from_file(
     #    "aai_resources/new_configs/avoidance/chess_red.yaml"
         #"aai_resources/test_configs/MySample2.yaml"

@@ -7,7 +7,7 @@ from collections import deque, defaultdict
 import torch as th
 import itertools as it
 import numpy as np
-DOCKER_CONFIG_PATH = '/aaio/data/sub_config.yaml'
+DOCKER_CONFIG_PATH = '/aaio/data/pretrained/new-configs/sub_config.yaml'
 from a2c_ppo_acktr.preprocessors import GridOracle, GridOracleWithAngles
 
 class ActionAdapter(object):

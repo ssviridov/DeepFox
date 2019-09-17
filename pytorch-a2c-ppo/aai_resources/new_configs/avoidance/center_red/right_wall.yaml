@@ -1,7 +1,7 @@
 !ArenaConfig
 arenas:
   0: !Arena
-    t: 5000
+    t: 1000
     items:
     - !Item
       name: DeathZone
@@ -9,7 +9,7 @@ arenas:
       positions:
       - !Vector3 {x: 20, y: 0, z: 20}
       sizes:
-        - !Vector3 {x: 24., y: 0, z: 24.}
+      - !Vector3 {x: 24., y: 0, z: 24.}
     - !Item
       name: GoodGoal
       positions:
@@ -38,6 +38,7 @@ arenas:
       rotations: [0]
     - !Item
       name: Cardbox2
+      positions:
       - !Vector3 {x: -1, y: 0, z: 34}
       sizes:
       - !Vector3 {x: 2, y: -1, z: 3}
