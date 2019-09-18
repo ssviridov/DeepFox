@@ -139,8 +139,7 @@ def main():
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
-    gen_config = HierarchicalSampler\
-        .create_from_dir(args.config_dir)
+    gen_config = HierarchicalSampler.create_from_dir(args.config_dir)
     #gen_config = SingleConfigGenerator.from_file(
     #    "aai_resources/new_configs/avoidance/chess_red.yaml"
         #"aai_resources/test_configs/MySample2.yaml"

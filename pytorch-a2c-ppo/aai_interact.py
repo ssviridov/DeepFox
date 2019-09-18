@@ -9,8 +9,8 @@ from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator
 import cv2
 
 aai_path = "aai_resources/env/AnimalAI"
-aai_config_dir = "aai_resources/new_configs/mazes/" #"aai_resources/test_configs/"
-curr_config = aai_config_dir + "chess_walls.yaml" #"exampleConfig.yaml"
+aai_config_dir = "aai_resources/new_configs/" #"aai_resources/test_configs/"
+curr_config = aai_config_dir + "objects/rnd_tunnels_transparent.yaml" #"exampleConfig.yaml"
 
 
 class EnvInteractor(SimpleImageViewer):

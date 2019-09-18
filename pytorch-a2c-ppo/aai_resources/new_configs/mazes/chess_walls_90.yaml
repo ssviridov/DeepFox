@@ -5,7 +5,7 @@ arenas:
     items:
     - !Item
       name: Wall
-      #rotations: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+      rotations: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
       positions:
       - !Vector3 {x: -1, y: 0, z: 4}
       - !Vector3 {x: -1, y: 0, z: 4}
@@ -87,10 +87,15 @@ arenas:
         - !RGB {r: 153, g: 153, b: 153}
     - !Item
       name: GoodGoalMulti
-      sizes:
-      - !Vector3 {x: 1, y: 1, z: 1}
-      - !Vector3 {x: 1, y: 1, z: 1}
+      positions:
+      - !Vector3 {x: -1, y: 0, z: 6.}
+      - !Vector3 {x: 14., y: 0, z: -1.}
+      #sizes:
+      #- !Vector3 {x: 1, y: 1, z: 1}
+      #- !Vector3 {x: 1, y: 1, z: 1}
     - !Item
       name: GoodGoal
+      positions:
+      - !Vector3 {x: -1, y: 0, z: 22.}
       #sizes:
       #- !Vector3 {x: 2., y: 2., z: 2.}
