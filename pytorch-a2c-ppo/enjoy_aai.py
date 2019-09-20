@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_config_generator import ListSampler, HierarchicalSampler
+from a2c_ppo_acktr.aai_config_generator import ListSampler, HierarchicalSampler, SingleConfigGenerator
 
 sys.path.append('a2c_ppo_acktr')
 
@@ -70,8 +70,8 @@ if args.seed is None:
     args.seed = np.random.randint(1000)
 
 device = torch.device("cuda:0" if args.cuda else "cpu")
-gen_config = HierarchicalSampler.create_from_dir(args.config_dir)
-#gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/allObjectsRandom1.yaml")
+gen_config = ListSampler.create_from_dir(args.config_dir)
+#gen_config = SingleConfigGenerator.from_file("aai_resources/test_configs/time_limits/empty_yellow.yaml")
 
 train_args = load_args(os.path.dirname(args.model_path))
 
@@ -104,6 +104,9 @@ data = torch.load(args.model_path, map_location=device)
 actor_critic = data['model'] if isinstance(data, dict) else data[0]
 
 actor_critic = actor_critic.to(device)
+actor_critic.eval()
+print("Model Architecture:")
+print(actor_critic)
 
 episode_rewards = []
 episode_success = []

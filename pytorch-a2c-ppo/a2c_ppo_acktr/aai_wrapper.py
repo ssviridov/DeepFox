@@ -17,7 +17,7 @@ from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from a2c_ppo_acktr.envs import TransposeImage, VecPyTorch, VecPyTorchFrameStack, VecPyTorchFrameStackDictObs, ShmemVecEnv
 from .aai_config_generator import SingleConfigGenerator
 from .aai_env_fixed import UnityEnvHeadless
-from .preprocessors import GridOracle, GridOracleWithAngles
+from .preprocessors import GridOracle, GridOracleWithAngles, MetaObs
 
 import torch
 
@@ -31,6 +31,7 @@ def rotate(vec, angle):
 
 
 class AnimalAIWrapper(gym.Env):
+
     def __init__(self, env_path, rank, config_generator,
                  action_repeat=1, docker_training=False,
                  headless=False, image_only=True, channel_first=True):
@@ -127,6 +128,13 @@ class AnimalAIWrapper(gym.Env):
             return dict()
 
     def reset(self, forced_config=None):
+        self.t = 0
+        self.angle = np.zeros((1,), dtype=np.float32)
+        self.pos = np.zeros((3,), dtype=np.float32)
+
+        self.ep_reward = 0.
+        self.ep_success = False
+
         if forced_config:
             self._set_config(forced_config)
         else:
@@ -135,13 +143,6 @@ class AnimalAIWrapper(gym.Env):
         obs, r, done = self.process_state(self.env.reset(arenas_configurations=self.config))
         while done:
             obs, r, done = self.process_state(self.env.reset(arenas_configurations=self.config))
-
-        self.t = 0
-        self.angle = np.zeros((1,), dtype=np.float32)
-        self.pos = np.zeros((3,), dtype=np.float32)
-
-        self.ep_reward = 0.
-        self.ep_success = False
 
         return obs
 
@@ -205,6 +206,8 @@ def make_env_aai(env_path, config_generator, rank,
                 ).wrap_env(env)
             else:
                 raise NotImplementedError("Only '3d' or 'angles' types for GridOracle")
+
+            env = MetaObs().wrap_env(env)
 
         return env
 
