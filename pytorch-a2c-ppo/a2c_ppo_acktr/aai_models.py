@@ -191,7 +191,7 @@ class ImageVecMapBase(NNBase):
         self.map_encoder = nn.Sequential(
             init_(nn.Conv2d(num_channels, 16, 4, 2)), nn.ReLU(),
             init_(nn.Conv2d(16, 32, 3, 1)), nn.ReLU(),
-            nn.AvgPool2d(2, stride=2),
+            #nn.AvgPool2d(2, stride=2),
             Flatten()
         )
 

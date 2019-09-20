@@ -24,6 +24,9 @@ arenas:
       - !Vector3 {x: 11., y: 0, z: 38.}
     - !Item
       name: Wall
+      colors:
+        - !RGB {r: 153, g: 153, b: 153}
+        - !RGB {r: 153, g: 153, b: 153}
       sizes:
       - !Vector3 {x: 3., y: 5., z: 5.}
       - !Vector3 {x: 4., y: 5., z: 4.}
