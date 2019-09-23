@@ -8,7 +8,7 @@ import torch
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.aai_arguments import get_args
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMapBase
+from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMapBase, ImageVecMap2
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
@@ -141,10 +141,10 @@ def main():
 
     gen_config = HierarchicalSampler.create_from_dir(args.config_dir)
     #gen_config = SingleConfigGenerator.from_file(
-    #    "aai_resources/new_configs/avoidance/chess_red.yaml"
+    #    "aai_resources/new_configs/mazes/chess_walls.yaml")
         #"aai_resources/test_configs/MySample2.yaml"
     #    "aai_resources/default_configs/1-Food.yaml"
-    #)
+
 
     envs = make_vec_envs_aai(
         args.env_path, gen_config, args.seed, args.num_processes,
@@ -153,7 +153,9 @@ def main():
         grid_oracle_kwargs=dict(
             oracle_type=args.oracle_type,
             oracle_reward=args.oracle_reward,
-            num_angles=20, cell_side=2.,#TODO: move these to commandline arguments
+            num_angles=15, cell_side=2,
+            trace_decay=0.992, # randomly
+            #TODO: move these to commandline arguments
         ),
         image_only=len(args.extra_obs) == 0,
     )
@@ -161,13 +163,13 @@ def main():
     actor_critic = AAIPolicy(
         envs.observation_space,
         envs.action_space,
-        base=ImageVecMapBase,
+        base=ImageVecMap2,
         base_kwargs={
             'recurrent': args.recurrent_policy,
             'extra_obs': args.extra_obs,
             'hidden_size':512,
-            'extra_encoder_dim':384,
-            'image_encoder_dim':512,
+            'map_dim':256, #'extra_encoder_dim':384,
+            'image_dim':512,
         #    'freeze_resnet':True,
         }
     )
@@ -213,10 +215,10 @@ def main():
     rollouts.obs[0].copy_(obs)
     rollouts.to(device)
 
-    episode_rewards = deque(maxlen=100)
-    episode_success = deque(maxlen=100)
-    episode_len = deque(maxlen=100)
-    episode_visited = deque(maxlen=100)
+    episode_rewards = deque(maxlen=200)
+    episode_success = deque(maxlen=200)
+    episode_len = deque(maxlen=200)
+    episode_visited = deque(maxlen=200)
 
     print(args_to_str(args))
 

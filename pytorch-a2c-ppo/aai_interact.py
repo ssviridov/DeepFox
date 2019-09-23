@@ -10,7 +10,7 @@ import cv2
 
 aai_path = "aai_resources/env/AnimalAI"
 aai_config_dir = "aai_resources/new_configs/" #"aai_resources/test_configs/"
-curr_config = aai_config_dir + "objects/rnd_tunnels_transparent.yaml" #"exampleConfig.yaml"
+curr_config = aai_config_dir + "mazes/chess_walls.yaml" #"exampleConfig.yaml"
 
 
 class EnvInteractor(SimpleImageViewer):
@@ -119,7 +119,8 @@ def main():
         grid_oracle_kwargs=dict(
             oracle_type="angles",
             trace_decay=1.,# 0.9999,
-            num_angles=3
+            num_angles=3,
+            cell_side=2,
         ),
         channel_first=False,
         image_only=False
