@@ -189,9 +189,9 @@ class ImageVecMapBase(NNBase):
                                constant_(x, 0), nn.init.calculate_gain('relu'))
 
         self.map_encoder = nn.Sequential(
-            init_(nn.Conv2d(num_channels, 16, 4, 2)), nn.ReLU(),
-            init_(nn.Conv2d(16, 32, 3, 1)), nn.ReLU(),
-            #nn.AvgPool2d(2, stride=2),
+            init_(nn.Conv2d(num_channels, 32, 4, 2)), nn.ReLU(), #was num_channes -> 16
+            init_(nn.Conv2d(32, 32, 3, 1)), nn.ReLU(), # was 16, -> 32
+            init_(nn.Conv2d(32, 64, 3, 1)), nn.ReLU(), # was AvgPool2D without relu
             Flatten()
         )
 

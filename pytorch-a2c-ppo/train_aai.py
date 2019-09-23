@@ -166,7 +166,7 @@ def main():
             'recurrent': args.recurrent_policy,
             'extra_obs': args.extra_obs,
             'hidden_size':512,
-            'extra_encoder_dim':256,
+            'extra_encoder_dim':384,
             'image_encoder_dim':512,
         #    'freeze_resnet':True,
         }

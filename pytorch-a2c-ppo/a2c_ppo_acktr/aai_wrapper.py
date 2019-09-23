@@ -81,12 +81,14 @@ class AnimalAIWrapper(gym.Env):
         speed_obs = space.Box(-2.4, 2.4, shape=[3,], dtype=np.float32)
         angle = space.Box(-1., 1., shape=[1,], dtype=np.float32)
         pos = space.Box(-10., 10., shape=[3,], dtype=np.float32)
+        time = space.Box(0., 4., shape=[1,], dtype=np.float32)
 
         return space.Dict({
             "image":image_obs,
             "speed":speed_obs,
             'angle':angle,
-            'pos':pos
+            'pos':pos,
+            'time': time,
         })
 
     def _set_config(self, new_config):
@@ -114,7 +116,8 @@ class AnimalAIWrapper(gym.Env):
             "image":img,
             "speed":absolute_speed /10., #(-21.,21.)/10. --> (-2.1,2.1)
             "angle":self.angle/180 - 1., #(0., 360.)/180 -1. --> (-1.,1.)
-            "pos":self.pos/70. #(-700.,700.)/70. --> (-10.,10)
+            "pos":self.pos/70., #(-700.,700.)/70. --> (-10.,10)
+            "time": (self.time_limit - self.t)/250
         }
 
     def _make_info(self, obs, r, done):
