@@ -1,6 +1,57 @@
 import torch as th
 from torch import nn
 
+def outer_init(layer: nn.Module) -> None:
+    """
+    Initialization for output layers of policy and value networks typically
+    used in deep reinforcement learning literature.
+    """
+    if isinstance(layer, (nn.Linear, nn.Conv1d, nn.Conv2d)):
+        v = 3e-3
+        nn.init.uniform_(layer.weight.data, -v, v)
+        if layer.bias is not None:
+            nn.init.uniform_(layer.bias.data, -v, v)
+
+class TemporalAttentionPooling(nn.Module):
+    name2activation = {
+        "softmax": nn.Softmax(dim=1),
+        "tanh": nn.Tanh(),
+        "sigmoid": nn.Sigmoid()
+    }
+
+    def __init__(self, features_in, activation=None, kernel_size=1, **params):
+        super().__init__()
+        self.features_in = features_in
+        activation = activation or "softmax"
+
+        self.attention_pooling = nn.Sequential(
+            nn.Conv1d(
+                in_channels=features_in,
+                out_channels=1,
+                kernel_size=kernel_size,
+                **params
+            ),
+            TemporalAttentionPooling.name2activation[activation]
+        )
+        self.attention_pooling.apply(outer_init)
+
+    def forward(self, features):
+        """
+        :param features: [batch_size, history_len, feature_size]
+        :return:
+        """
+        x = features[:,:-1,:]
+        x_last = features[:,-1,:]
+        batch_size, history_len, feature_size = x.shape
+
+        x = x.view(batch_size, history_len, -1)
+        x_a = x.transpose(1, 2)
+        x_attn = (self.attention_pooling(x_a) * x_a).transpose(1, 2)
+        x_attn = x_attn.sum(1, keepdim=True)
+
+        res = th.cat([x_attn.squeeze(1), x_last], dim=-1)
+        return res
+
 
 class NaiveHistoryAttention(nn.Module):
 
@@ -15,6 +66,7 @@ class NaiveHistoryAttention(nn.Module):
         attn_mem, attn_weights = self.mha(query, keys, keys)
         result = th.cat((query, attn_mem),dim=2).squeeze(0)
         return result #batch_size, 2*embedding dim
+
 
 
 if __name__ == "__main__":

@@ -240,27 +240,28 @@ def main():
                         obs, #rollouts.obs[step],
                         rollouts.recurrent_hidden_states[step],
                         rollouts.masks[step])
-                    #/no_grad
-                    # Obser reward and next obs
-                    obs, reward, done, infos = envs.step(action)
 
-                    for info in infos:
-                        if 'episode_reward' in info.keys():
-                            episode_rewards.append(info['episode_reward'])
-                            episode_success.append(info['episode_success'])
-                            episode_len.append(info['episode_len'])
-                            if "grid_oracle" in info:
-                                episode_visited.append(info["grid_oracle"]["n_visited"])
+                #/no_grad
+                # Obser reward and next obs
+                obs, reward, done, infos = envs.step(action)
 
-                    # If done then clean the history of observations.
-                    masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done])
-                    bad_masks = torch.tensor(
-                        [[0.0] if 'bad_transition' in info.keys() else [1.0]
-                         for info in infos]
-                    )
+                for info in infos:
+                    if 'episode_reward' in info.keys():
+                        episode_rewards.append(info['episode_reward'])
+                        episode_success.append(info['episode_success'])
+                        episode_len.append(info['episode_len'])
+                        if "grid_oracle" in info:
+                            episode_visited.append(info["grid_oracle"]["n_visited"])
 
-                    rollouts.insert(obs, recurrent_hidden_states, action,
-                                    action_log_prob, value, reward, masks, bad_masks)
+                # If done then clean the history of observations.
+                masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done])
+                bad_masks = torch.tensor(
+                    [[0.0] if 'bad_transition' in info.keys() else [1.0]
+                     for info in infos]
+                )
+
+                rollouts.insert(obs, recurrent_hidden_states, action,
+                                action_log_prob, value, reward, masks, bad_masks)
 
             with torch.no_grad():
     #            assert torch.equal(obs['image'], rollouts.obs[-1].asdict()['image']), 'woy!! this is strange!'

@@ -7,7 +7,7 @@ from torch import nn
 import torch as th
 from a2c_ppo_acktr.utils import init, conv_output_shape
 import numpy as np
-from .aai_layers import NaiveHistoryAttention
+from .aai_layers import NaiveHistoryAttention, TemporalAttentionPooling
 
 class AAIPolicy(Policy):
     def __init__(self, obs_space, action_space, base=None, base_kwargs=None):
@@ -265,8 +265,8 @@ class AttentionIVM(ImageVecMapBase):
             extra_encoder_dim,
             image_encoder_dim,
         )
-        self.attention_layer = NaiveHistoryAttention(self._total_encoder_dim, 4)
-
+        self.attention_layer = TemporalAttentionPooling(self._total_encoder_dim)
+        #NaiveHistoryAttention(self._total_encoder_dim, 4)
 
     def _flatten_batch(self, input):
         batch_shapes = {}
