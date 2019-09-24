@@ -305,6 +305,7 @@ class VecPyTorchFrameStackDictObs(VecEnvWrapper):
     def close(self):
         self.venv.close()
 
+
 class VecHistoryFrameStack(VecEnvWrapper):
 
     def _stack_space(self, obs_space):

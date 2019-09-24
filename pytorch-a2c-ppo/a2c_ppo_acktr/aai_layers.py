@@ -1,5 +1,6 @@
 import torch as th
 from torch import nn
+from collections import deque
 
 def outer_init(layer: nn.Module) -> None:
     """
@@ -13,6 +14,7 @@ def outer_init(layer: nn.Module) -> None:
             nn.init.uniform_(layer.bias.data, -v, v)
 
 class TemporalAttentionPooling(nn.Module):
+    """Unashamedly got this from Catalyst framework:)"""
     name2activation = {
         "softmax": nn.Softmax(dim=1),
         "tanh": nn.Tanh(),
@@ -68,6 +70,19 @@ class NaiveHistoryAttention(nn.Module):
         return result #batch_size, 2*embedding dim
 
 
+class CachedAttention(nn.Module):
+    def __init__(self, attn_module, history_len):
+        super(CachedAttention, self).__init__()
+        self.attn_module = attn_module
+        self.history_len = history_len
+        self.cache = deque(history_len)
+
+    def forward(self, input, attn_cache, mask):
+        history_window = th.cat(tuple(attn_cache), dim=1)
+        history_window[~mask] = 0.
+        result = self.attn_module(input, history_window)
+        attn_cache.append(input)
+        return result, attn_cache
 
 if __name__ == "__main__":
     batch_size = 2

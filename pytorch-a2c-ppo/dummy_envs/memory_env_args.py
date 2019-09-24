@@ -6,25 +6,6 @@ def get_args():
     parser = argparse.ArgumentParser(description='RL')
     #AAI specific arguments:
     parser.add_argument(
-        '--env-path',
-        default='aai_resources/env/AnimalAI',
-        help='Path to the game file')
-    parser.add_argument(
-        '--config-dir',
-        default='aai_resources/default_configs',
-        help='Path to a directory with AnimalAI default_configs')
-    parser.add_argument(
-        '-hl', '--headless',
-        action='store_true',
-        default=False,
-        help='Use headless mod to train UnityEnvironment on server'
-    )
-    parser.add_argument(
-        '--extra-obs', type=str, nargs='*', default=tuple(),
-        help="A list of additional observations for agents to receive. "
-             "Possible choices are: pos, speed, angle"
-    )
-    parser.add_argument(
         '-fs', '--frame-stack', type=int, default=2,
         help="Number of image frames to stack into agent's observation, (default: 2)",
     )
@@ -33,9 +14,12 @@ def get_args():
         help="Which GridOracle you want to use, hint: use angles"
     )
     parser.add_argument(
-        "--oracle-reward", "-or", default=0., type=float,
-        help="A size of !penalty! that agent gets for staying at same location"
+        "--episode-length", "-el", default=5, type=int,
+        help="Length of an episode"
         )
+    parser.add_argument(
+        '-hs', '--hidden-size', default=64, type=int, help='Size of hidden layers')
+
     #PPO/A2C arguments:
     parser.add_argument(
         '--algo', default='a2c', help='algorithm to use: a2c | ppo | acktr')
@@ -150,9 +134,9 @@ def get_args():
         help='compute returns taking into account time limits')
     parser.add_argument(
         '-pol','--policy',
-        choices=('rnn', 'ff', 'mha'),
+        choices=('rnn', 'ff', 'mha', 'tc'),
         default="ff",
-        help='Choose policy: feedforward, recurrent, or based on multihead attention!'
+        help='Choose policy: feedforward, recurrent, or attention-based architecture!'
     )
     parser.add_argument(
         '--use-linear-lr-decay',

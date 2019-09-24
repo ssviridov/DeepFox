@@ -6,81 +6,18 @@ import numpy as np
 import torch
 
 from a2c_ppo_acktr import algo, utils
-from a2c_ppo_acktr.aai_arguments import get_args
-from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_models import AAIPolicy, \
-    ImageVecMapBase, AttentionIVM
+from dummy_envs.memory_env_args import get_args
+from dummy_envs.memory_env import make_vec_dummy_memory
+from dummy_envs.memory_models import DummyPolicy, DummyMLP, DummyAttention
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
-from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
-import json
 from tensorboardX import SummaryWriter
+from train_aai import DummySaver, ensure_dir, args_to_str
 
-
-def ensure_dir(file_path):
-    """
-    Checks if the containing directories exist,
-    and if not, creates them.
-    """
-    directory = os.path.dirname(file_path)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-
-class DummySaver(object):
-
-    def __init__(self, args):
-        super(DummySaver, self).__init__()
-        self.best_quality = float('-inf')
-        self.args = args
-        self.save_every_updates = args.save_interval
-        self.save_subdir = self._build_save_path(args)
-        self.save_args()
-        self.model_path = os.path.join(self.save_subdir, "under-{}0M-steps.pt")
-        self.best_model_path = os.path.join(self.save_subdir, "best.pt")
-
-    def save_model(self, num_updates, total_step, quality, model, optim=None):
-        if num_updates % self.save_every_updates == 0 or num_updates == (self.args.total_updates-1):
-            # 9950k goes into under-10M-steps.pt
-            # 10200k goes into under-20-steps.pt
-            lt_steps = str((total_step // 10000000) + 1)
-            save_path = self.model_path.format(lt_steps)
-            print('Model saved in {} (quality={:.2f})'.format(save_path, quality))
-            data = {'num_updates':num_updates, "model":model, "optim":optim}
-            torch.save(data, save_path)
-            if self.best_quality < quality:
-                print('Model saved as {}'.format(self.best_model_path))
-                self.best_quality = quality
-                torch.save(data, self.best_model_path)
-
-    def _build_save_path(self, args):
-
-        #sub_folder = "{}-{}-{}".format(
-        #    args.algo, args.policy,
-        #    "extra-obs" if args.extra_obs else "pure"
-        #)
-        #save_subdir = os.path.join(args.save_dir, sub_folder)
-        return args.save_dir
-
-    def save_args(self, file_name='train_args.json', exclude_args=tuple()):
-        args = self.args
-        folder = self.save_subdir
-
-        save_args = {k:v for k, v in vars(args).items() if k not in exclude_args}
-        file_path = os.path.join(folder, file_name)
-        ensure_dir(file_path)
-        with open(file_path, 'w') as f:
-            status = json.dump(save_args, f, sort_keys=True, indent=2)
-
-        print('Train arguments saved in {}'.format(file_path))
-        return status
-
-
-def log_progress(summary,
+def log_progress(experiment_tag, summary,
         curr_update, curr_step, ep_rewards, ep_success, ep_len,
-        ep_visited, dist_entropy, value_loss, action_loss,
-        fps, loop_fps,
+        dist_entropy, value_loss, action_loss, fps, loop_fps,
 ):
     mean_r = np.mean(ep_rewards)
     median_r = np.median(ep_rewards)
@@ -88,46 +25,41 @@ def log_progress(summary,
     max_r = np.max(ep_rewards)
     mean_success = np.mean(ep_success)
     mean_eplen = np.mean(ep_len)
-    mean_visited = np.mean(ep_visited)
     print(
         "Updates {}, num_steps {}, FPS/Loop FPS {}/{} \n"
         "Last {} episodes:\n  mean/median R {:.2f}/{:.2f}, min/max R {:.1f}/{:.1f}\n"
-        "  mean success {:.2f},  mean length {:.1f}, mean visted {:.1f}\n".format(
+        "  mean success {:.2f},  mean length {:.1f}\n".format(
             curr_update, curr_step, fps, loop_fps,
             len(ep_rewards), mean_r, median_r,
-            min_r, max_r, mean_success, mean_eplen, mean_visited
+            min_r, max_r, mean_success, mean_eplen,
         )
     )
 
     if summary is None: return
-    summary.add_scalars(
-        "Env/reward", {"mean":mean_r, "median":median_r},
-        curr_step,
-    )
-    summary.add_scalar("Env/success", mean_success, curr_step)
-    summary.add_scalar("Env/episode_length", mean_eplen, curr_step)
+    summary.add_scalars("Env/mean_reward", {experiment_tag:mean_r}, curr_step)
 
-    summary.add_scalar('Loss/enropy', dist_entropy, curr_step)
-    summary.add_scalar('Loss/critic', value_loss, curr_step)
-    summary.add_scalar('Loss/actor', action_loss, curr_step)
+    summary.add_scalars("Env/success", {experiment_tag:mean_success}, curr_step)
+    summary.add_scalars("Env/episode_length", {experiment_tag:mean_eplen}, curr_step)
 
-    summary.add_scalars("Performance/FPS", {"total":fps, "loop":loop_fps}, curr_step)
+    summary.add_scalars('Loss/enropy', {experiment_tag:dist_entropy}, curr_step)
+    summary.add_scalars('Loss/critic', {experiment_tag:value_loss}, curr_step)
+    summary.add_scalars('Loss/actor', {experiment_tag:action_loss}, curr_step)
 
-def args_to_str(args):
-    lines = ['','ARGUMENTS:']
-    newline = os.linesep
-    args = vars(args)
-    for key in sorted(args.keys()):
-        lines.append('    "{0}": {1}'.format(key, args[key]))
-    return newline.join(lines)
+    summary.add_scalars("Performance/FPS", {experiment_tag:fps}, curr_step)
 
+def summary_path(save_dir):
+    experiment_dir = os.path.dirname(os.path.relpath(save_dir, "pretrained"))
+    return os.path.join('pretrained', experiment_dir, 'summaries')
 
 def main():
     args = get_args()
+    assert args.num_steps <= args.episode_length+1, "We don't need this until we get to meta-rl!"
     if args.seed is None:
         args.seed = np.random.randint(1000)
     steps_per_update = args.num_steps*args.num_processes
     args.total_updates = int(args.num_env_steps) // steps_per_update
+    experiment_tag = os.path.basename(args.save_dir)
+
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
@@ -140,37 +72,22 @@ def main():
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
-    gen_config = ListSampler.create_from_dir(args.config_dir)
-    gen_config = SingleConfigGenerator.from_file(
-        #"aai_resources/test_configs/MySample2.yaml"
-        "aai_resources/default_configs/1-Food.yaml"
+    envs = make_vec_dummy_memory(
+        args.num_processes, device, args.seed,
+        args.episode_length, args.frame_stack if args.frame_stack > 1 else None,
     )
 
-    envs = make_vec_envs_aai(
-        args.env_path, gen_config, args.seed, args.num_processes,
-        device, num_frame_stack=args.frame_stack,
-        headless=args.headless,
-        grid_oracle_kwargs=dict(
-            oracle_type=args.oracle_type,
-            oracle_reward=args.oracle_reward
-        ),
-        image_only=len(args.extra_obs) == 0,
-    )
-
-    actor_critic = AAIPolicy(
+    actor_critic = DummyPolicy(
         envs.observation_space,
         envs.action_space,
-        base=AttentionIVM,
+        base=DummyMLP if args.policy in ['rnn', 'ff'] else DummyAttention,
         base_kwargs={
             'policy': args.policy,
-            'extra_obs': args.extra_obs,
-            'hidden_size':None,
-            'extra_encoder_dim':256,
-            'image_encoder_dim':256,
-        #    'freeze_resnet':True,
+            'encoder_size':args.hidden_size,
         }
     )
-
+    print("MODEL:")
+    print(actor_critic)
     actor_critic.to(device)
 
     if args.algo == 'a2c':
@@ -215,13 +132,13 @@ def main():
     episode_rewards = deque(maxlen=100)
     episode_success = deque(maxlen=100)
     episode_len = deque(maxlen=100)
-    episode_visited = deque(maxlen=100)
 
     print(args_to_str(args))
 
     start_time = time.time()
     model_saver = DummySaver(args)
-    summary = SummaryWriter(os.path.join(model_saver.save_subdir, 'summary'))
+
+    summary = SummaryWriter(summary_path(args.save_dir))
     try:
         for curr_update in range(args.total_updates):
             loop_start_time = time.time()
@@ -250,8 +167,6 @@ def main():
                         episode_rewards.append(info['episode_reward'])
                         episode_success.append(info['episode_success'])
                         episode_len.append(info['episode_len'])
-                        if "grid_oracle" in info:
-                            episode_visited.append(info["grid_oracle"]["n_visited"])
 
                 # If done then clean the history of observations.
                 masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done])
@@ -282,10 +197,10 @@ def main():
 
             if curr_update % args.log_interval == 0 and len(episode_rewards):
                 log_progress(
+                    experiment_tag,
                     summary,curr_update, curr_steps,
-                    episode_rewards, episode_success, episode_len,
-                    episode_visited,
-                    dist_entropy, value_loss, action_loss,
+                    episode_rewards, episode_success,
+                    episode_len, dist_entropy, value_loss, action_loss,
                     fps=int(curr_steps/(time.time()-start_time)),
                     loop_fps=int(steps_per_update/(time.time()-loop_start_time))
                 )
