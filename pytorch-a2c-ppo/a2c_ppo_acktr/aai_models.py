@@ -193,8 +193,7 @@ class ImageVecMapBase(NNBase):
 
         self.map_encoder = nn.Sequential(
             init_(nn.Conv2d(num_channels, 16, 4, 2)), nn.ReLU(),
-            init_(nn.Conv2d(16, 32, 3, 1)), nn.ReLU(),
-            nn.MaxPool2d(2, stride=2),
+            init_(nn.Conv2d(16, 32, 3, 1)), nn.MaxPool2d(2, stride=2), nn.ReLU(),
             Flatten()
         )
 
@@ -265,7 +264,14 @@ class AttentionIVM(ImageVecMapBase):
             extra_encoder_dim,
             image_encoder_dim,
         )
-        self.attention_layer = TemporalAttentionPooling(self._total_encoder_dim)
+        if policy == 'tc':
+            self.attention_layer = TemporalAttentionPooling(self._total_encoder_dim)
+        elif policy == 'mha':
+            self.attention_layer = NaiveHistoryAttention(self._total_encoder_dim, 2)
+        else:
+            raise NotImplementedError("Don't what are you talking about? {}-attention?".format(policy))
+
+        #self.attention_layer = TemporalAttentionPooling(self._total_encoder_dim)
         #NaiveHistoryAttention(self._total_encoder_dim, 4)
 
     def _flatten_batch(self, input):

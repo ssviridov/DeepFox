@@ -7,7 +7,8 @@ from a2c_ppo_acktr.utils import init, conv_output_shape
 import numpy as np
 import gym
 
-from a2c_ppo_acktr.aai_layers import TemporalAttentionPooling, NaiveHistoryAttention
+from a2c_ppo_acktr.aai_layers import \
+    TemporalAttentionPooling, NaiveHistoryAttention, CachedAttention
 
 class DummyPolicy(Policy):
     def __init__(self, obs_space, action_space, base=None, base_kwargs=None):
@@ -83,7 +84,7 @@ class DummyMLP(NNBase):
         return self.critic_linear(x), x, rnn_hxs
 
 
-class DummyAttention(DummyMLP):
+class MLPWithAttention(DummyMLP):
 
     def __init__(
             self,
@@ -91,7 +92,7 @@ class DummyAttention(DummyMLP):
             policy="mha",
             encoder_size=64,
     ):
-        super(DummyAttention, self).__init__(
+        super(MLPWithAttention, self).__init__(
             obs_space, policy, encoder_size, hidden_size=2*encoder_size,
         )
         assert not self.is_recurrent, "no RRN in my multi-head-attention network!"
@@ -129,7 +130,35 @@ class DummyAttention(DummyMLP):
         x = self.obs_encoder(flatten_input['obs'])
 
         x = x.view(*batch_shape, *x.shape[1:])
-        x = self.attention_layer(x)
+        x = self.attention_layer(x[:,-1], x[:,:-1])
 
         return self.critic_linear(x), x, rnn_hxs
 
+class MLPWithCachedAttention(DummyMLP):
+
+    def __init__(
+            self,
+            obs_space,
+            policy="mha",
+            encoder_size=64,
+            history_len=10,
+    ):
+        super(MLPWithCachedAttention, self).__init__(
+            obs_space, policy, encoder_size, hidden_size=2*encoder_size,
+        )
+        assert not self.is_recurrent, "no RRN in my multi-head-attention network!"
+        if policy == 'tc':
+            attention_layer = TemporalAttentionPooling(self._encoder_size)
+        elif policy == 'mha':
+            attention_layer = NaiveHistoryAttention(self._encoder_size, 2)
+        else:
+            raise NotImplementedError("Don't what are you talking about? {}-attention?".format(policy))
+        self.attention_layer = CachedAttention(attention_layer, history_len)
+
+    def forward(self, input, cached_history, masks, **kwargs):
+
+        x = self.obs_encoder(input['obs'])
+
+        x, cached_history = self.attention_layer(input, cached_history, masks)
+
+        return self.critic_linear(x), x, cached_history

@@ -150,7 +150,7 @@ def get_args():
         help='compute returns taking into account time limits')
     parser.add_argument(
         '-pol','--policy',
-        choices=('rnn', 'ff', 'mha'),
+        choices=('rnn', 'ff', 'mha', 'tc'),
         default="ff",
         help='Choose policy: feedforward, recurrent, or based on multihead attention!'
     )

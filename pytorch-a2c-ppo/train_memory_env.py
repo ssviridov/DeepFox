@@ -8,7 +8,7 @@ import torch
 from a2c_ppo_acktr import algo, utils
 from dummy_envs.memory_env_args import get_args
 from dummy_envs.memory_env import make_vec_dummy_memory
-from dummy_envs.memory_models import DummyPolicy, DummyMLP, DummyAttention
+from dummy_envs.memory_models import DummyPolicy, DummyMLP, MLPWithAttention, MLPWithCachedAttention
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
@@ -80,7 +80,7 @@ def main():
     actor_critic = DummyPolicy(
         envs.observation_space,
         envs.action_space,
-        base=DummyMLP if args.policy in ['rnn', 'ff'] else DummyAttention,
+        base=DummyMLP if args.policy in ['rnn', 'ff'] else MLPWithCachedAttention,
         base_kwargs={
             'policy': args.policy,
             'encoder_size':args.hidden_size,

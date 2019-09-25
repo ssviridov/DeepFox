@@ -143,7 +143,7 @@ def main():
     gen_config = ListSampler.create_from_dir(args.config_dir)
     gen_config = SingleConfigGenerator.from_file(
         #"aai_resources/test_configs/MySample2.yaml"
-        "aai_resources/default_configs/1-Food.yaml"
+        "aai_resources/test_configs/3_bridges.yaml"
     )
 
     envs = make_vec_envs_aai(
@@ -152,7 +152,8 @@ def main():
         headless=args.headless,
         grid_oracle_kwargs=dict(
             oracle_type=args.oracle_type,
-            oracle_reward=args.oracle_reward
+            oracle_reward=args.oracle_reward,
+            num_angles=12,
         ),
         image_only=len(args.extra_obs) == 0,
     )
@@ -170,7 +171,8 @@ def main():
         #    'freeze_resnet':True,
         }
     )
-
+    print("Model:")
+    print(actor_critic)
     actor_critic.to(device)
 
     if args.algo == 'a2c':

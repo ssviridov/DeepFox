@@ -37,13 +37,14 @@ class TemporalAttentionPooling(nn.Module):
         )
         self.attention_pooling.apply(outer_init)
 
-    def forward(self, features):
+    def forward(self, curr_obs, memory_window):
         """
         :param features: [batch_size, history_len, feature_size]
         :return:
         """
-        x = features[:,:-1,:]
-        x_last = features[:,-1,:]
+        x = memory_window
+        #x = features[:,:-1,:]
+        #x_last = features[:,-1,:]
         batch_size, history_len, feature_size = x.shape
 
         x = x.view(batch_size, history_len, -1)
@@ -51,8 +52,8 @@ class TemporalAttentionPooling(nn.Module):
         x_attn = (self.attention_pooling(x_a) * x_a).transpose(1, 2)
         x_attn = x_attn.sum(1, keepdim=True)
 
-        res = th.cat([x_attn.squeeze(1), x_last], dim=-1)
-        return res
+        result = th.cat([x_attn.squeeze(1), curr_obs], dim=-1)
+        return result
 
 
 class NaiveHistoryAttention(nn.Module):
@@ -61,10 +62,12 @@ class NaiveHistoryAttention(nn.Module):
         super(NaiveHistoryAttention, self).__init__()
         self.mha = nn.MultiheadAttention(embed_dim, num_heads)
 
-    def forward(self, memory_window):
+    def forward(self, cur_obs, memory_window):
         "Input should have the shape (batch_size, time_steps, embed_dim)"
-        query = memory_window[:,-1].unsqueeze(0) #1, batch_size, embed_dim
-        keys = memory_window[:,:-1].transpose(0,1) #time_steps-1, batch_size, embed_dim)
+        #query = memory_window[:,-1].unsqueeze(0) #1, batch_size, embed_dim
+        #keys = memory_window[:,:-1].transpose(0,1) #time_steps-1, batch_size, embed_dim)
+        query = cur_obs.unsqueeze(0)
+        keys = memory_window.transpose(0,1)
         attn_mem, attn_weights = self.mha(query, keys, keys)
         result = th.cat((query, attn_mem),dim=2).squeeze(0)
         return result #batch_size, 2*embedding dim
