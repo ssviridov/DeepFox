@@ -1,7 +1,7 @@
 import argparse
-
+import datetime
 import torch
-
+import os.path as ospath
 
 def get_args():
     parser = argparse.ArgumentParser(description='RL')
@@ -29,14 +29,28 @@ def get_args():
         '-fs', '--frame-stack', type=int, default=2,
         help="Number of image frames to stack into agent's observation, (default: 2)",
     )
+    #GRID-ORACLE arguments:
+    #parser.add_argument(
+    #    "--oracle-type", '-ot', default="angles", choices=("3d", "angles"),
+    #    help="Which GridOracle you want to use, hint: use angles"
+    #)
     parser.add_argument(
-        "--oracle-type", '-ot', default="angles", choices=("3d", "angles"),
-        help="Which GridOracle you want to use, hint: use angles"
+        '--oracle-num-angles', '-ona', default=15, type=int,
+        help='Number of angle bins in the visitation map. '
+             '(default: 15, this means one bin covers 24 degrees)'
     )
     parser.add_argument(
-        "--oracle-reward", "-or", default=0., type=float,
-        help="A size of !penalty! that agent gets for staying at same location"
+        '--oracle-cell-side', '-ocs', default=2., type=int,
+        help='Size of a single grid cell. (default: 2.)'
+    )
+    parser.add_argument(
+        "--oracle-reward", "-or", default=-1./100., type=float,
+        help=" If reward > 0 then agents gets this reward when it visits grid cell,"
+             " otherwise it is a penalty given to the agent when it stays in the visited"
+             " cell for more than one step. (default: -1./100)"
         )
+
+
     #PPO/A2C arguments:
     parser.add_argument(
         '--algo', default='a2c', help='algorithm to use: a2c | ppo | acktr')
@@ -124,11 +138,11 @@ def get_args():
         type=int,
         default=100,
         help='save interval, one save per n updates (default: 100)')
-    parser.add_argument(
-        '--eval-interval',
-        type=int,
-        default=None,
-        help='eval interval, one eval per n updates (default: None)')
+    #parser.add_argument(
+    #    '--eval-interval',
+    #    type=int,
+    #    default=None,
+    #    help='eval interval, one eval per n updates (default: None)')
     parser.add_argument(
         '--num-env-steps',
         type=int,
@@ -138,7 +152,14 @@ def get_args():
     parser.add_argument(
         '-sd', '--save-dir',
         default='./trained_models/',
-        help='directory to save agent logs (default: ./trained_models/)')
+        help='Directory to save different experiments and common summaries (default: ./trained_models/)')
+    parser.add_argument(
+        '-et', '--experiment-tag',
+        default=None,
+        help='tag of the current experiment. '
+             'It affect name of the written summaries, and path to saved weights. '
+             '(default: <current-time>)'
+    )
     parser.add_argument(
         '--no-cuda',
         action='store_true',
@@ -162,6 +183,12 @@ def get_args():
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+
+    if not getattr(args, 'experiment_tag', None):
+        date = datetime.datetime.now()
+        args.experiment_tag = "{0.year}-{0.month}-{0.day}-{0.hour}-{0.minute}".format(date)
+
+    args.summary_dir = ospath.join(args.save_dir, "summaries", args.experiment_tag)
 
     assert args.algo in ['a2c', 'ppo', 'acktr']
     if args.recurrent_policy:

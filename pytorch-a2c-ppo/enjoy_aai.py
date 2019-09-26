@@ -75,17 +75,16 @@ gen_config = ListSampler.create_from_dir(args.config_dir)
 
 train_args = load_args(os.path.dirname(args.model_path))
 
-if(train_args):
-    image_only = len(train_args.get('extra_obs',[])) == 0
+image_only = len(train_args.get('extra_obs',[])) == 0
+oracle_kwargs = train_args.get('real_oracle_args', None)
+if not oracle_kwargs:
     oracle_kwargs = dict(
         oracle_type=train_args.get("oracle_type","angles"),
-        oracle_reward=train_args.get("oracle_rewards", 1./100.),
-        cell_side=2.,
-        num_angles=20,
+        oracle_reward=train_args.get("oracle_rewards", -1./100.),
+        cell_side=train_args.get('oracle_cell_side', 2.),
+        num_angles=train_args.get('oracle_num_angles', 15),
     )
-else:
-    image_only = True
-    oracle_kwargs = dict()
+
 
 env = make_vec_envs_aai(
     args.env_path,

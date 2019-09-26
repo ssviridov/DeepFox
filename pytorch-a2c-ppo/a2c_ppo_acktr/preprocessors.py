@@ -90,24 +90,24 @@ class GridOracle(Preprocessor):
 
     def __init__(
             self,
-            oracle_reward=2.5/100.,
-            # if penatly is true agent is punished for revisiting cells
+            oracle_reward=-2.5/100.,
+            # if reward <= 0. agent is punished for revisiting cells
             # otherwise it is rewarded for visiting new cells
-            penalty_mode=True,
+            #penalty_mode=True,
             cell_size=(1., 0.5, 1.),
             trace_decay=1., # this means no decay!
             revisit_threshold=0.01,
             exploration_only=False,
             grid_size=None,
     ):
-        assert oracle_reward >= 0., \
-            "oracle_reward is non-negative! Use `penalty_mode=True` " \
-            "if you want to punish an agent for the lack of exploration"
+        #assert oracle_reward >= 0., \
+        #    "oracle_reward is non-negative! Use `penalty_mode=True` " \
+        #    "if you want to punish an agent for the lack of exploration"
 
         super(GridOracle, self).__init__()
-        self.oracle_r = oracle_reward
+        self.oracle_r = np.abs(oracle_reward)
         self.cell_size = np.array(cell_size)
-        self.penalty_mode=penalty_mode
+        self.penalty_mode=(oracle_reward <= 0.0)
         self.exploration_only=exploration_only
         self.revisit_threshold = revisit_threshold
         self.trace_decay = trace_decay
@@ -237,10 +237,10 @@ class GridOracleWithAngles(Preprocessor):
 
     def __init__(
             self,
-            oracle_reward=1./100.,
-            # if penatly is true agent is punished for revisiting cells
+            oracle_reward=-1./100.,
+            # if reward < 0. agent is punished for revisiting cells
             # otherwise it is rewarded for visiting new cells
-            penalty_mode=True,
+            #penalty_mode=True,
             cell_side=1.,
             num_angles=6,
             trace_decay=1.,  # this means no decay!
@@ -249,16 +249,16 @@ class GridOracleWithAngles(Preprocessor):
             grid_side=None,
 
     ):
-        assert oracle_reward >= 0., \
-            "oracle_reward is non-negative! Use `penalty_mode=True` " \
-            "if you want to punish an agent for the lack of exploration"
+        #assert oracle_reward >= 0., \
+        #    "oracle_reward is non-negative! Use `penalty_mode=True` " \
+        #    "if you want to punish an agent for the lack of exploration"
 
         super(GridOracleWithAngles, self).__init__()
-        self.oracle_r = oracle_reward
+        self.oracle_r = np.abs(oracle_reward)
         self.cell_side = cell_side
         self.angle_box = self.ANGLE_RANGE/num_angles
 
-        self.penalty_mode = penalty_mode
+        self.penalty_mode = (oracle_reward <= 0.0)
         self.exploration_only = exploration_only
         self.revisit_threshold = revisit_threshold
         self.trace_decay = trace_decay
@@ -356,7 +356,9 @@ class GridOracleWithAngles(Preprocessor):
         r = 0.
 
         if self._visited[angle, x, z] < self.revisit_threshold:
-            r += self.oracle_r  # reward for visiting new state
+            oracle_r = self.oracle_r
+            #oracle_r = self.oracle_r*(self.grid_size[0] - sum(self._visited[:, x, z] != 0.) / self.grid_size[0])
+            r += oracle_r  # reward for visiting new state
 
         if self.penalty_mode:  # (+oracle_r or 0.) becomes a (0. or -oracle_r)
             r -= self.oracle_r

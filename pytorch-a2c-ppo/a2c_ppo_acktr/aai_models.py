@@ -299,6 +299,7 @@ class ImageVecMap2(NNBase):
             init_(nn.Conv2d(64, 32, 3, stride=1)), nn.ReLU(), Flatten(),
             init_(nn.Linear(32 * 7 * 7, self._image_encoder_dim)), nn.ReLU()
         )
+        #self.last_fc = init_(nn.Linear(self._total_encoder_dim, self._hidden_size))
 
     def _create_map_encoder(self):
         if 'visited' in self._extra_obs:
@@ -307,11 +308,11 @@ class ImageVecMap2(NNBase):
                                    constant_(x, 0), nn.init.calculate_gain('relu'))
 
             encoder = OrderedDict([
-                ("conv1", init_(nn.Conv2d(num_channels, 16, 3, 1))),
+                ("conv1", init_(nn.Conv2d(num_channels, 32, 3, 1))),
                 ("relu1", nn.ReLU()),  # was num_channes -> 16
-                ('conv2', init_(nn.Conv2d(16, 32, 3, 1))),
+                ('conv2', init_(nn.Conv2d(32, 32, 3, 1))),
                 ('relu2', nn.ReLU()),  # was 16, -> 32
-                ('conv3', init_(nn.Conv2d(32, 32, 3, 1))),
+                ('conv3', init_(nn.Conv2d(32, 16, 3, 1))),
                 #('maxpool3'), nn.MaxPool2d(2,2),
                 ('relu3', nn.ReLU()),  # was AvgPool2D without relu
                 ('faltten4', Flatten()),

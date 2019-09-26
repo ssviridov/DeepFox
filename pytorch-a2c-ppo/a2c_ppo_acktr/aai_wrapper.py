@@ -34,7 +34,9 @@ class AnimalAIWrapper(gym.Env):
 
     def __init__(self, env_path, rank, config_generator,
                  action_repeat=1, docker_training=False,
-                 headless=False, image_only=True, channel_first=True):
+                 headless=False, image_only=True, channel_first=True,
+                 reduced_actions=False):
+
         super(AnimalAIWrapper, self).__init__()
         #if config_generator is None we use random config!
         self.config_generator = config_generator if config_generator else SingleConfigGenerator()
@@ -56,10 +58,11 @@ class AnimalAIWrapper(gym.Env):
         #self._set_config(self.config_generator.next_config())
 
         lookup_func = lambda a: {'Learner':np.array([a], dtype=float)}
-        #if reduced_actions:
-        #    lookup = itertools.product([0,1], [0,1,2])
-        #else:
-        lookup = itertools.product([0,1,2], repeat=2)
+        if reduced_actions:
+            lookup = itertools.product([0,1], [0,1,2])
+        else:
+            lookup = itertools.product([0,1,2], repeat=2)
+
         lookup = dict(enumerate(map(lookup_func, lookup)))
         self.action_map = lambda a: lookup[a]
         
