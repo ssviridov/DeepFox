@@ -101,7 +101,7 @@ def log_progress(summary,
     summary.add_scalar("Env/success", mean_success, curr_step)
     summary.add_scalar("Env/episode-len", mean_eplen, curr_step)
 
-    summary.add_scalar('Loss/enropy', dist_entropy, curr_step)
+    summary.add_scalar('Loss/entropy', dist_entropy, curr_step)
     summary.add_scalar('Loss/critic', value_loss, curr_step)
     summary.add_scalar('Loss/actor', action_loss, curr_step)
 
@@ -156,6 +156,7 @@ def main():
         headless=args.headless,
         grid_oracle_kwargs=args.real_oracle_args,
         image_only=len(args.extra_obs) == 0,
+        docker_training=args.docker_training
     )
 
     #Create Agent:

@@ -10,6 +10,13 @@ def get_args():
         '--env-path',
         default='aai_resources/env/AnimalAI',
         help='Path to the game file')
+
+    parser.add_argument(
+        '--docker-training',
+        action='store_true',
+        default=False,
+        help='Training in docker')
+
     parser.add_argument(
         '--config-dir',
         default='aai_resources/default_configs',
