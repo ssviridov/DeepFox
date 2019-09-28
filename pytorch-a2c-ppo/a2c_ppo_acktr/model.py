@@ -103,8 +103,8 @@ class NNBase(nn.Module):
     @property
     def recurrent_hidden_state_size(self):
         if self._recurrent:
-            return self._hidden_size
-        return 1
+            return (self._hidden_size,)
+        return (1,)
 
     @property
     def output_size(self):

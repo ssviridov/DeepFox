@@ -1,5 +1,6 @@
 import argparse
-
+import datetime
+import os.path as ospath
 import torch
 
 def get_args():
@@ -8,10 +9,6 @@ def get_args():
     parser.add_argument(
         '-fs', '--frame-stack', type=int, default=2,
         help="Number of image frames to stack into agent's observation, (default: 2)",
-    )
-    parser.add_argument(
-        "--oracle-type", '-ot', default="angles", choices=("3d", "angles"),
-        help="Which GridOracle you want to use, hint: use angles"
     )
     parser.add_argument(
         "--episode-length", "-el", default=5, type=int,
@@ -121,7 +118,13 @@ def get_args():
     parser.add_argument(
         '-sd', '--save-dir',
         default='./trained_models/',
-        help='directory to save agent logs (default: ./trained_models/)')
+        help='Directory to save different experiments and common summaries (default: ./trained_models/)')
+    parser.add_argument(
+        '-et', '--experiment-tag',
+        default=None,
+        help='tag of the current experiment. '
+             'It affect name of the written summaries, and path to saved weights. '
+             '(default: <current-time>)')
     parser.add_argument(
         '--no-cuda',
         action='store_true',
@@ -133,10 +136,10 @@ def get_args():
         default=False,
         help='compute returns taking into account time limits')
     parser.add_argument(
-        '-pol','--policy',
+        '-pol', '--policy',
         choices=('rnn', 'ff', 'mha', 'tc'),
         default="ff",
-        help='Choose policy: feedforward, recurrent, or attention-based architecture!'
+        help='Choose policy: feedforward, recurrent, or based on multihead attention!'
     )
     parser.add_argument(
         '--use-linear-lr-decay',
@@ -147,8 +150,14 @@ def get_args():
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
 
+    if not getattr(args, 'experiment_tag', None):
+        date = datetime.datetime.now()
+        args.experiment_tag = "{0.year}-{0.month}-{0.day}-{0.hour}-{0.minute}".format(date)
+
+    args.summary_dir = ospath.join(args.save_dir, "summaries", args.experiment_tag)
+
     assert args.algo in ['a2c', 'ppo', 'acktr']
-    if args.policy == 'rnn':
+    if args.policy == "rnn":
         assert args.algo in ['a2c', 'ppo'], \
             'Recurrent policy is not implemented for ACKTR'
 

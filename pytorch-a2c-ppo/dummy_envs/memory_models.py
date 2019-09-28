@@ -91,17 +91,27 @@ class MLPWithAttention(DummyMLP):
             obs_space,
             policy="mha",
             encoder_size=64,
+            freeze_encoder=False,
     ):
+
         super(MLPWithAttention, self).__init__(
             obs_space, policy, encoder_size, hidden_size=2*encoder_size,
         )
+
         assert not self.is_recurrent, "no RRN in my multi-head-attention network!"
         if policy == 'tc':
-            self.attention_layer = TemporalAttentionPooling(self._encoder_size)
+            self.attention_layer = TemporalAttentionPooling(
+                self._encoder_size)
         elif policy == 'mha':
             self.attention_layer = NaiveHistoryAttention(self._encoder_size, 2)
         else:
             raise NotImplementedError("Don't what are you talking about? {}-attention?".format(policy))
+
+        self._freeze_encoder = freeze_encoder
+        if self._freeze_encoder:
+            print('Encoder is freezed!')
+            for p in self.obs_encoder.parameters():
+                p.requires_grad=False
 
     def _flatten_batch(self, input):
         batch_shapes = {}

@@ -15,7 +15,7 @@ from a2c_ppo_acktr.aai_storage import create_storage
 from tensorboardX import SummaryWriter
 from train_aai import DummySaver, ensure_dir, args_to_str
 
-def log_progress(experiment_tag, summary,
+def log_progress(summary,
         curr_update, curr_step, ep_rewards, ep_success, ep_len,
         dist_entropy, value_loss, action_loss, fps, loop_fps,
 ):
@@ -36,30 +36,26 @@ def log_progress(experiment_tag, summary,
     )
 
     if summary is None: return
-    summary.add_scalars("Env/mean_reward", {experiment_tag:mean_r}, curr_step)
+    summary.add_scalar("Env/reward-mean", mean_r, curr_step)
+    summary.add_scalar("Env/success", mean_success, curr_step)
+    summary.add_scalar("Env/episode-len", mean_eplen, curr_step)
 
-    summary.add_scalars("Env/success", {experiment_tag:mean_success}, curr_step)
-    summary.add_scalars("Env/episode_length", {experiment_tag:mean_eplen}, curr_step)
+    summary.add_scalar('Loss/enropy', dist_entropy, curr_step)
+    summary.add_scalar('Loss/critic', value_loss, curr_step)
+    summary.add_scalar('Loss/actor', action_loss, curr_step)
 
-    summary.add_scalars('Loss/enropy', {experiment_tag:dist_entropy}, curr_step)
-    summary.add_scalars('Loss/critic', {experiment_tag:value_loss}, curr_step)
-    summary.add_scalars('Loss/actor', {experiment_tag:action_loss}, curr_step)
+    summary.add_scalar("Performance/FPS", fps, curr_step)
 
-    summary.add_scalars("Performance/FPS", {experiment_tag:fps}, curr_step)
-
-def summary_path(save_dir):
-    experiment_dir = os.path.dirname(os.path.relpath(save_dir, "pretrained"))
-    return os.path.join('pretrained', experiment_dir, 'summaries')
 
 def main():
     args = get_args()
-    assert args.num_steps <= args.episode_length+1, "We don't need this until we get to meta-rl!"
+    assert args.num_steps <= args.episode_length+1, \
+        "We don't need this until we get to meta-rl!"
     if args.seed is None:
         args.seed = np.random.randint(1000)
+
     steps_per_update = args.num_steps*args.num_processes
     args.total_updates = int(args.num_env_steps) // steps_per_update
-    experiment_tag = os.path.basename(args.save_dir)
-
 
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
@@ -77,15 +73,20 @@ def main():
         args.episode_length, args.frame_stack if args.frame_stack > 1 else None,
     )
 
+    args.base_network_args = {
+            'policy': args.policy,
+            'encoder_size':args.hidden_size,
+            #'freeze_encoder':False,
+        }
+
     actor_critic = DummyPolicy(
         envs.observation_space,
         envs.action_space,
-        base=DummyMLP if args.policy in ['rnn', 'ff'] else MLPWithCachedAttention,
-        base_kwargs={
-            'policy': args.policy,
-            'encoder_size':args.hidden_size,
-        }
+        base=DummyMLP if args.policy in ['rnn', 'ff'] else MLPWithAttention,
+        base_kwargs=args.base_network_args
     )
+    args.network_architecture = repr(actor_critic)
+
     print("MODEL:")
     print(actor_critic)
     actor_critic.to(device)
@@ -129,16 +130,15 @@ def main():
     rollouts.obs[0].copy_(obs)
     rollouts.to(device)
 
-    episode_rewards = deque(maxlen=100)
-    episode_success = deque(maxlen=100)
-    episode_len = deque(maxlen=100)
+    episode_rewards = deque(maxlen=150)
+    episode_success = deque(maxlen=150)
+    episode_len = deque(maxlen=150)
 
     print(args_to_str(args))
 
     start_time = time.time()
     model_saver = DummySaver(args)
-
-    summary = SummaryWriter(summary_path(args.save_dir))
+    summary = SummaryWriter(args.summary_dir)
     try:
         for curr_update in range(args.total_updates):
             loop_start_time = time.time()
@@ -153,9 +153,9 @@ def main():
                 with torch.no_grad():
 
                     #assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!
-                    value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
+                    value, action, action_log_prob, internal_state = actor_critic.act(
                         obs, #rollouts.obs[step],
-                        rollouts.recurrent_hidden_states[step],
+                        rollouts.internal_states[step],
                         rollouts.masks[step])
 
                 #/no_grad
@@ -175,14 +175,14 @@ def main():
                      for info in infos]
                 )
 
-                rollouts.insert(obs, recurrent_hidden_states, action,
+                rollouts.insert(obs, internal_state, action,
                                 action_log_prob, value, reward, masks, bad_masks)
 
             with torch.no_grad():
     #            assert torch.equal(obs['image'], rollouts.obs[-1].asdict()['image']), 'woy!! this is strange!'
                 next_value = actor_critic.get_value(
                     obs, #rollouts.obs[-1],
-                    rollouts.recurrent_hidden_states[-1],
+                    rollouts.internal_states[-1],
                     rollouts.masks[-1]).detach()
 
 
@@ -197,7 +197,6 @@ def main():
 
             if curr_update % args.log_interval == 0 and len(episode_rewards):
                 log_progress(
-                    experiment_tag,
                     summary,curr_update, curr_steps,
                     episode_rewards, episode_success,
                     episode_len, dist_entropy, value_loss, action_loss,

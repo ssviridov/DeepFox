@@ -43,7 +43,7 @@ class DummySaver(object):
     def save_model(self, num_updates, total_step, quality, model, optim=None):
         if num_updates % self.save_every_updates == 0 or num_updates == (self.args.total_updates-1):
             # 9950k goes into under-10M-steps.pt
-            # 10200k goes into under-20-steps.pt
+            # 10200k goes into under-20M-steps.pt
             lt_steps = str((total_step // 10000000) + 1)
             save_path = self.model_path.format(lt_steps)
             print('Model saved in {} (quality={:.2f})'.format(save_path, quality))
@@ -55,13 +55,9 @@ class DummySaver(object):
                 torch.save(data, self.best_model_path)
 
     def _build_save_path(self, args):
-
-        #sub_folder = "{}-{}-{}".format(
-        #    args.algo, args.policy,
-        #    "extra-obs" if args.extra_obs else "pure"
-        #)
-        #save_subdir = os.path.join(args.save_dir, sub_folder)
-        return args.save_dir
+        assert hasattr(args, 'experiment_tag'), 'Please specify --experiment-tag, -et'
+        save_subdir = os.path.join(args.save_dir, args.experiment_tag)
+        return save_subdir
 
     def save_args(self, file_name='train_args.json', exclude_args=tuple()):
         args = self.args
@@ -75,7 +71,6 @@ class DummySaver(object):
 
         print('Train arguments saved in {}'.format(file_path))
         return status
-
 
 def log_progress(summary,
         curr_update, curr_step, ep_rewards, ep_success, ep_len,
@@ -100,18 +95,18 @@ def log_progress(summary,
     )
 
     if summary is None: return
-    summary.add_scalars(
-        "Env/reward", {"mean":mean_r, "median":median_r},
-        curr_step,
-    )
+    summary.add_scalar("Env/r-mean", mean_r, curr_step)
+    summary.add_scalar("Env/r-median", median_r, curr_step)
     summary.add_scalar("Env/success", mean_success, curr_step)
-    summary.add_scalar("Env/episode_length", mean_eplen, curr_step)
+    summary.add_scalar("Env/episode-len", mean_eplen, curr_step)
 
     summary.add_scalar('Loss/enropy', dist_entropy, curr_step)
     summary.add_scalar('Loss/critic', value_loss, curr_step)
     summary.add_scalar('Loss/actor', action_loss, curr_step)
 
-    summary.add_scalars("Performance/FPS", {"total":fps, "loop":loop_fps}, curr_step)
+    summary.add_scalar("Performance/total-fps", fps, curr_step)
+    summary.add_scalar("Performance/loop-fps", loop_fps, curr_step)
+
 
 def args_to_str(args):
     lines = ['','ARGUMENTS:']
@@ -140,39 +135,49 @@ def main():
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
+    #Create Environment:
     gen_config = ListSampler.create_from_dir(args.config_dir)
-    gen_config = SingleConfigGenerator.from_file(
+    #gen_config = SingleConfigGenerator.from_file(
+    #    "aai_resources/new_configs/mazes/chess_walls.yaml")
         #"aai_resources/test_configs/MySample2.yaml"
-        "aai_resources/test_configs/3_bridges.yaml"
+    #    "aai_resources/default_configs/1-Food.yaml"
+    args.real_oracle_args = dict(
+        oracle_type="angles",
+        oracle_reward=args.oracle_reward,
+        num_angles=args.oracle_num_angles,
+        cell_side=args.oracle_cell_side,
+        # trace_decay=0.992, # randomly
     )
 
     envs = make_vec_envs_aai(
         args.env_path, gen_config, args.seed, args.num_processes,
         device, num_frame_stack=args.frame_stack,
         headless=args.headless,
-        grid_oracle_kwargs=dict(
-            oracle_type=args.oracle_type,
-            oracle_reward=args.oracle_reward,
-            num_angles=12,
-        ),
+        grid_oracle_kwargs=args.real_oracle_args,
         image_only=len(args.extra_obs) == 0,
     )
+
+    #Create Agent:
+    args.base_network_args = {
+        'recurrent': args.recurrent_policy,
+        'extra_obs': args.extra_obs,
+        'hidden_size': 512,
+        'map_dim': 384,  # 'extra_encoder_dim':384,
+        'image_dim': 512,
+        #    'freeze_resnet':True,
+    }
+
+    network_class = AttentionIVM
+    args.network_cls = network_class.__name__
 
     actor_critic = AAIPolicy(
         envs.observation_space,
         envs.action_space,
-        base=AttentionIVM,
-        base_kwargs={
-            'policy': args.policy,
-            'extra_obs': args.extra_obs,
-            'hidden_size':None,
-            'extra_encoder_dim':256,
-            'image_encoder_dim':256,
-        #    'freeze_resnet':True,
-        }
+        base=network_class,
+        base_kwargs=args.base_network_args
     )
-    print("Model:")
-    print(actor_critic)
+
+    args.network_architecture=repr(actor_critic)
     actor_critic.to(device)
 
     if args.algo == 'a2c':
@@ -214,16 +219,16 @@ def main():
     rollouts.obs[0].copy_(obs)
     rollouts.to(device)
 
-    episode_rewards = deque(maxlen=100)
-    episode_success = deque(maxlen=100)
-    episode_len = deque(maxlen=100)
-    episode_visited = deque(maxlen=100)
+    episode_rewards = deque(maxlen=200)
+    episode_success = deque(maxlen=200)
+    episode_len = deque(maxlen=200)
+    episode_visited = deque(maxlen=200)
 
     print(args_to_str(args))
 
     start_time = time.time()
     model_saver = DummySaver(args)
-    summary = SummaryWriter(os.path.join(model_saver.save_subdir, 'summary'))
+    summary = SummaryWriter(args.summary_dir)
     try:
         for curr_update in range(args.total_updates):
             loop_start_time = time.time()

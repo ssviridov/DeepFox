@@ -13,12 +13,21 @@ def outer_init(layer: nn.Module) -> None:
         if layer.bias is not None:
             nn.init.uniform_(layer.bias.data, -v, v)
 
+class Temperature(nn.Module):
+
+    def __init__(self):
+        super(Temperature, self).__init__()
+
+    def forward(self, x, t=1.):
+        return x/t
+
+
 class TemporalAttentionPooling(nn.Module):
     """Unashamedly got this from Catalyst framework:)"""
     name2activation = {
         "softmax": nn.Softmax(dim=1),
         "tanh": nn.Tanh(),
-        "sigmoid": nn.Sigmoid()
+        "sigmoid": nn.Sigmoid(),
     }
 
     def __init__(self, features_in, activation=None, kernel_size=1, **params):
