@@ -4,11 +4,15 @@ from animalai.envs.brain import BrainParameters
 from animalai.envs.gym.environment import AnimalAIEnv
 from animalai.envs.arena_config import ArenaConfig
 from collections import deque, defaultdict
+import os.path as ospath
+import json
 import torch as th
 import itertools as it
 import numpy as np
-DOCKER_CONFIG_PATH = '/aaio/data/pretrained/many-configs/sub_config.yaml'
-from a2c_ppo_acktr.preprocessors import GridOracle, GridOracleWithAngles
+from a2c_ppo_acktr.preprocessors import GridOracle, GridOracleWithAngles, MetaObs
+#change this path to specify a model you want to submit:
+DOCKER_CONFIG_PATH = '/aaio/data/pretrained/meta-arch/sub_config.yaml'
+
 
 class ActionAdapter(object):
     def __init__(
@@ -47,7 +51,6 @@ class ObservationAdapter(object):
             transpose=True,
             unsqueeze=True,
             stackables=(),
-            grid_oracle=None
     ):
         self.device = device
         self.image_only = image_only
@@ -57,10 +60,8 @@ class ObservationAdapter(object):
         self.stacked_obs = defaultdict(lambda :deque(maxlen=self.nstack))
         self.stackables = stackables
 
-    def reset(self):
+    def reset(self, time_limit):
         self.stacked_obs.clear()
-        self.angle = np.zeros((1,), dtype=np.float32)
-        self.pos = np.zeros((3,), dtype=np.float32)
 
     def __call__(self, prev_action, obs, r, done, info):
 
@@ -115,15 +116,17 @@ class ExtraObsAdapter(ObservationAdapter):
         oracle_type = oracle_args.pop("oracle_type")
 
         if oracle_type == "angles":
-            self.grid_oracle = GridOracleWithAngles(
+            grid_oracle = GridOracleWithAngles(
                 **oracle_args
             )
         elif oracle_type == "3d":
-            self.grid_oracle = GridOracle(
+            grid_oracle= GridOracle(
                 **oracle_args
             )
         else:
             raise NotImplementedError()
+
+        self.preprocessors = [grid_oracle, MetaObs()]
 
         super(ExtraObsAdapter, self).__init__(*args, **kwargs)
 
@@ -135,13 +138,20 @@ class ExtraObsAdapter(ObservationAdapter):
         z1 = np.sin(betta) * x + np.cos(betta) * z
         return np.array([x1, y, z1])
 
-    def reset(self):
-        super(ExtraObsAdapter, self).reset()
+    def reset(self, time_limit):
+        super(ExtraObsAdapter, self).reset(time_limit)
         self.angle = np.zeros((1,), dtype=np.float32)
         self.pos = np.zeros((3,), dtype=np.float32)
+        self.time_limit = time_limit
+        self.t = 0
+
+        print("Check that your preprocessor is OK with empty/meaningless"
+              " input to reset method")
         #yeah if we feed GridOracle with an empty obs nothing bad happens
         #but future preprocessors could brake with this...
-        obs = self.grid_oracle.reset({})
+        obs = {}
+        for p in self.preprocessors:
+            obs = p.reset(obs)
 
     def _update_angle(self, action):
         if (action - 1) % 3 == 0: #TURN_RIGHT:
@@ -160,11 +170,13 @@ class ExtraObsAdapter(ObservationAdapter):
             "image": img,
             "speed": absolute_speed / 10.,  # (-21.,21.)/10. --> (-2.1,2.1)
             "angle": self.angle / 180 - 1.,  # (0., 360.)/180 -1. --> (-1.,1.)
-            "pos": self.pos / 70.  # (-700.,700.)/70. --> (-10.,10)
+            "pos": self.pos / 70.,  # (-700.,700.)/70. --> (-10.,10)
+            "time":(self.time_limit - self.t) / 250
         }
-        obs, r, done, info = self.grid_oracle.step(
-            prev_action, obs, r, done, info
-        )
+        self.t += 1
+        for p in self.preprocessors:
+            obs, r, done, info = p.step(prev_action, obs, r, done, info)
+
         return super(ExtraObsAdapter, self).__call__(
             prev_action, obs, r, done, info
         )
@@ -178,6 +190,14 @@ def make_obs_adapter(**kwargs):
 
 
 class Agent(object):
+
+    def _load_train_args(self, folder, file_name='train_args.json'):
+        file_path = ospath.join(folder, file_name)
+        if ospath.isfile(file_path):
+            with open(file_path, 'r') as f:
+                return json.load(f)
+        else:
+            return None
 
     def __init__(self, config_path=DOCKER_CONFIG_PATH):
         """
@@ -217,6 +237,27 @@ class Agent(object):
 
         self.report_config()
 
+    def _check_config(self, config):
+        model_path = config['model_path']
+        train_args = self._load_train_args(ospath.dirname(model_path))
+        obs_adapter_args = config['observation_adapter']
+        assert obs_adapter_args['frame_stack'] == train_args['frame_stack'],\
+        "frame_stack={} in train_args.json but frame_stack={} in sub_config.yaml".format(
+            train_args['frame_stack'], obs_adapter_args['frame_stack']
+        )
+
+        oracle_args = train_args.get('real_oracle_args', None)
+        if oracle_args:
+            train_keys = set(oracle_args.keys())
+            conf_keys = set(obs_adapter_args['grid_oracle'])
+            keys_match = conf_keys == train_keys
+            msg = "GridOracle args are different in config:\n" + \
+            "train_args version: {}\n,".format(oracle_args) + \
+            " sub_config version: {}".format(obs_adapter_args['grid_oracle'])
+            values_match = True
+            #for k in train_keys:
+            #    oracle_args[k] =
+
     def report_config(self):
         print("current device:", self.device)
         print("greedy:", self.greedy)
@@ -232,7 +273,7 @@ class Agent(object):
         self.episode_is_running = False
         self.rnn_state = None
         self.masks = None
-        self.adapt_obs.reset()
+        self.adapt_obs.reset(t)
         self.adapt_act.reset()
         self.prev_action = 0
 
