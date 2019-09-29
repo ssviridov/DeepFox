@@ -32,6 +32,8 @@ def rotate(vec, angle):
 
 class AnimalAIWrapper(gym.Env):
 
+    ENV_RELOAD_PERIOD = 600 #total update period( with num_processes==16) will be in range [2M, 6M] steps
+
     def __init__(self, env_path, rank, config_generator,
                  action_repeat=1, docker_training=False,
                  headless=False, image_only=True, channel_first=True,
@@ -45,16 +47,20 @@ class AnimalAIWrapper(gym.Env):
         self.image_only=image_only
         self.channel_first = channel_first
 
-        #change UnityEnvHeadless to UnityEnvironment and remove headless arg
-        # if you want to return to the animalai version of environemt
-        #self.env = UnityEnvironment(
-        self.env = UnityEnvHeadless( #
+        self.num_episode = 0
+        self.env = None
+        # after self.env is closed socket is still in use for 60 seconds!
+        # so instead of waiting for the old socket we open a new environment on another port:
+        self._worker_id_pair = (rank, rank+200)
+        self._env_args = dict(
             file_name=env_path, worker_id=rank,
             seed=rank, n_arenas=1,
-            arenas_configurations=None, #self.config,
+            arenas_configurations=None,  # self.config,
             docker_training=docker_training,
             headless=headless
         )
+        self._reload_env() #this creates new environment with self._env_args!
+        #self.env = UnityEnvHeadless(**self._env_args)
         #self._set_config(self.config_generator.next_config())
 
         lookup_func = lambda a: {'Learner':np.array([a], dtype=float)}
@@ -74,6 +80,24 @@ class AnimalAIWrapper(gym.Env):
         self.angle = np.zeros((1,), dtype=np.float32)
 
         #print("Time limit: ", self.time_limit)
+
+    def _reload_env(self):
+        if self.env:
+            self.env.close()
+            del self.env
+
+        #seed is changed to not repeat the same ENV_RELAOD_PERIOD episodes
+        self._env_args['seed'] = (self._env_args['seed'] + self.num_episode) % 1009
+        #worker id is changed to fix problem with linux sockets that wait for 60 seconds after closing
+        self._env_args['worker_id'] = self._worker_id_pair[0]
+        self._worker_id_pair = self._worker_id_pair[::-1]
+        print("Reloading Env#{}: episode: {}, sleep={}s".format(
+            self._env_args['worker_id'], self.num_episode, 0.
+        ))
+        # change UnityEnvHeadless to UnityEnvironment and remove headless arg
+        # if you want to return to the animalai version of environemt
+        env = UnityEnvHeadless(**self._env_args)
+        self.env = env
 
     def _make_obs_space(self):
         img_shape = (3,84,84) if self.channel_first else (84,84,3)
@@ -134,6 +158,10 @@ class AnimalAIWrapper(gym.Env):
             return dict()
 
     def reset(self, forced_config=None):
+        self.num_episode += 1
+        if self.num_episode % self.ENV_RELOAD_PERIOD == 0:
+            self._reload_env()
+
         self.t = 0
         self.angle = np.zeros((1,), dtype=np.float32)
         self.pos = np.zeros((3,), dtype=np.float32)
