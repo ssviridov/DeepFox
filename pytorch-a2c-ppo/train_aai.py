@@ -9,7 +9,7 @@ import torch
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.aai_arguments import get_args
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMapBase, ImageVecMap2
+from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMapBase, ImageVecMap2, ImageVecMap3
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
@@ -168,7 +168,7 @@ def main():
         'image_dim': 512,
         #    'freeze_resnet':True,
     }
-    network_class = ImageVecMap2
+    network_class = ImageVecMap3
     args.network_cls = network_class.__name__
 
     actor_critic = AAIPolicy(

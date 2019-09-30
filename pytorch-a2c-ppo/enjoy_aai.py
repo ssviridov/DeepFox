@@ -70,7 +70,7 @@ if args.seed is None:
     args.seed = np.random.randint(1000)
 
 device = torch.device("cuda:0" if args.cuda else "cpu")
-gen_config = HierarchicalSampler.create_from_dir(args.config_dir)
+gen_config = ListSampler.create_from_dir(args.config_dir)
 #gen_config = SingleConfigGenerator.from_file("aai_resources/test_configs/time_limits/empty_yellow.yaml")
 
 train_args = load_args(os.path.dirname(args.model_path))

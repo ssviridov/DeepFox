@@ -337,6 +337,71 @@ class ImageVecMap2(NNBase):
         return self.critic_linear(x), x, rnn_hxs
 
 
+def create_fc_layer(input_dim, output_dim, nl='relu'):
+    init_ = lambda m:init(m, nn.init.orthogonal_, lambda x:nn.init.
+                          constant_(x, 0), nn.init.calculate_gain(nl))
+    return init_(nn.Linear(input_dim, output_dim))
+
+
+class ImageVecMap3(ImageVecMap2):
+    """
+    Have 2-layered heads instead of 1-layered heads in ImageVecMapBase/2
+    """
+    def __init__(
+            self,
+            obs_space,
+            extra_obs=None,
+            recurrent=False,
+            hidden_size=512,
+            map_dim=512,
+            image_dim=512,
+            dropout=0.0
+    ):
+        assert 'visited' in extra_obs, "It is better to choose different network if you are not planning to use visited map"
+        self.dropout=0.0
+        self._image_encoder_dim = image_dim
+        self._map_encoder_dim = map_dim
+        # if there is no extra_obs then we don't need an extra_encoder!
+        self._extra_obs = extra_obs
+        self._obs_shapes = self._get_obs_shapes(obs_space)
+        self._vector_obs = [k for k in self._extra_obs if len(self._obs_shapes[k]) == 1]
+        self._vector_dim =  sum(self._obs_shapes[k][0] for k in self._vector_obs)
+
+        self._total_encoder_dim = self._image_encoder_dim + self._map_encoder_dim + self._vector_dim
+        # if recurrent is False there will be no layer after encoders ouputs:
+        self._hidden_size = hidden_size #if recurrent else self._total_encoder_dim
+
+
+        super(ImageVecMap2, self).__init__(
+            recurrent,
+            self._total_encoder_dim,
+            self._hidden_size
+        )
+
+        self._create_image_encoder()
+        self._create_map_encoder()
+        self.actor_linear = create_fc_layer(self._total_encoder_dim, self._hidden_size)
+        self._create_critic()
+        self.train()
+
+    def _create_critic(self):
+        self.crtic_linear1 = create_fc_layer(self._total_encoder_dim, self._hidden_size)
+        init_ = lambda m:init(m, nn.init.orthogonal_, lambda x:nn.init.constant_(x, 0))
+        self.critic_linear2 = init_(nn.Linear(self._hidden_size, 1))
+
+    def forward(self, input, rnn_hxs, masks, **kwargs):
+        x_img = self.image_encoder(input['image'] / 255.0)
+        map_embed = self.map_encoder(input['visited'])
+        vector_obs = self.concat_vector_obs(input)
+        x = th.cat([x_img, map_embed, vector_obs], dim=1)
+
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        v_pred = self.critic_linear2(F.relu(self.crtic_linear1(x)))
+        actor_scores = F.relu(self.actor_linear(x))
+        return v_pred, actor_scores, rnn_hxs
+
 
 import torchvision
 class AAIResnet(AAIBase):
