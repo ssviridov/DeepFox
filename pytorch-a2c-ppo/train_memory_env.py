@@ -68,21 +68,31 @@ def main():
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
+    args.base_network_args = {
+        'policy':args.policy,
+        'encoder_size':args.hidden_size,
+        # 'freeze_encoder':False,
+    }
+
+    if args.policy in ['rnn', 'ff']:
+        BaseNet = DummyMLP
+        args.frame_stack = 1
+    elif args.policy.startswith('cached'):
+        BaseNet = MLPWithCachedAttention
+        args.base_network_args['history_len'] = args.frame_stack - 1
+        args.frame_stack = 1
+    else:
+        BaseNet = MLPWithAttention
+
     envs = make_vec_dummy_memory(
         args.num_processes, device, args.seed,
         args.episode_length, args.frame_stack if args.frame_stack > 1 else None,
     )
 
-    args.base_network_args = {
-            'policy': args.policy,
-            'encoder_size':args.hidden_size,
-            #'freeze_encoder':False,
-        }
-
     actor_critic = DummyPolicy(
         envs.observation_space,
         envs.action_space,
-        base=DummyMLP if args.policy in ['rnn', 'ff'] else MLPWithAttention,
+        base=BaseNet, #MLPWithAttention,
         base_kwargs=args.base_network_args
     )
     args.network_architecture = repr(actor_critic)
@@ -123,7 +133,7 @@ def main():
     rollouts = create_storage(
         args.num_steps, args.num_processes,
         envs.observation_space, envs.action_space,
-        actor_critic.recurrent_hidden_state_size
+        actor_critic.internal_state_shape
     )
 
     obs = envs.reset()
@@ -139,6 +149,7 @@ def main():
     start_time = time.time()
     model_saver = DummySaver(args)
     summary = SummaryWriter(args.summary_dir)
+
     try:
         for curr_update in range(args.total_updates):
             loop_start_time = time.time()
@@ -154,7 +165,7 @@ def main():
 
                     #assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!
                     value, action, action_log_prob, internal_state = actor_critic.act(
-                        obs, #rollouts.obs[step],
+                        obs, #rollouts.obs[step], rollouts.obs[step-obs_stack+1:step+1],
                         rollouts.internal_states[step],
                         rollouts.masks[step])
 

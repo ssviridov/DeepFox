@@ -7,7 +7,7 @@ def get_args():
     parser = argparse.ArgumentParser(description='RL')
     #AAI specific arguments:
     parser.add_argument(
-        '-fs', '--frame-stack', type=int, default=2,
+        '-fs', '--frame-stack', type=int, default=1,
         help="Number of image frames to stack into agent's observation, (default: 2)",
     )
     parser.add_argument(
@@ -16,7 +16,6 @@ def get_args():
         )
     parser.add_argument(
         '-hs', '--hidden-size', default=64, type=int, help='Size of hidden layers')
-
     #PPO/A2C arguments:
     parser.add_argument(
         '--algo', default='a2c', help='algorithm to use: a2c | ppo | acktr')
@@ -137,7 +136,7 @@ def get_args():
         help='compute returns taking into account time limits')
     parser.add_argument(
         '-pol', '--policy',
-        choices=('rnn', 'ff', 'mha', 'tc'),
+        choices=('rnn', 'ff', 'mha', 'tc', 'cached_tc', 'cached_mha'),
         default="ff",
         help='Choose policy: feedforward, recurrent, or based on multihead attention!'
     )

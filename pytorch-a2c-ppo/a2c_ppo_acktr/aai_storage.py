@@ -23,6 +23,7 @@ def create_storage(
     )
     return rollouts
 
+
 class DictAsTensor(object):
 
     @staticmethod
@@ -244,7 +245,7 @@ class RolloutStorageWithDictObs(object):
         perm = torch.randperm(num_processes)
         for start_ind in range(0, num_processes, num_envs_per_batch):
             obs_batch = []
-            recurrent_hidden_states_batch = []
+            internal_states_batch = []
             actions_batch = []
             value_preds_batch = []
             return_batch = []
@@ -256,7 +257,7 @@ class RolloutStorageWithDictObs(object):
                 ind = perm[start_ind + offset]
                 obs_batch.append(self.obs[:-1, ind])
 
-                recurrent_hidden_states_batch.append(
+                internal_states_batch.append(
                     self.internal_states[0:1, ind])
                 actions_batch.append(self.actions[:, ind])
                 value_preds_batch.append(self.value_preds[:-1, ind])
@@ -279,8 +280,8 @@ class RolloutStorageWithDictObs(object):
             adv_targ = torch.stack(adv_targ, 1)
 
             # States is just a (N, -1) tensor
-            recurrent_hidden_states_batch = torch.stack(
-                recurrent_hidden_states_batch, 1).view(N, -1)
+            internal_states_batch = torch.stack(
+                internal_states_batch, 1).squeeze(0) #remove Time-dimmension
 
             # Flatten the (T, N, ...) tensors to (T * N, ...)
             obs_batch = obs_batch.flatten_view(n_first_dims=2)
@@ -295,7 +296,7 @@ class RolloutStorageWithDictObs(object):
                     old_action_log_probs_batch)
             adv_targ = _flatten_helper(T, N, adv_targ)
 
-            yield obs_batch, recurrent_hidden_states_batch, actions_batch, \
+            yield obs_batch, internal_states_batch, actions_batch, \
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
 
 # rollouts.obs[0].copy_(obs)

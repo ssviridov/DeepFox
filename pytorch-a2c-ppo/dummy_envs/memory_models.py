@@ -78,7 +78,7 @@ class DummyMLP(NNBase):
     def forward(self, input, rnn_hxs, masks, **kwargs):
         x = self.obs_encoder(input['obs'])
 
-        if self.is_recurrent:
+        if self.is_sequential:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
         return self.critic_linear(x), x, rnn_hxs
@@ -98,7 +98,7 @@ class MLPWithAttention(DummyMLP):
             obs_space, policy, encoder_size, hidden_size=2*encoder_size,
         )
 
-        assert not self.is_recurrent, "no RRN in my multi-head-attention network!"
+        assert not self.is_sequential, "no RRN in my multi-head-attention network!"
         if policy == 'tc':
             self.attention_layer = TemporalAttentionPooling(
                 self._encoder_size)
@@ -156,19 +156,46 @@ class MLPWithCachedAttention(DummyMLP):
         super(MLPWithCachedAttention, self).__init__(
             obs_space, policy, encoder_size, hidden_size=2*encoder_size,
         )
-        assert not self.is_recurrent, "no RRN in my multi-head-attention network!"
-        if policy == 'tc':
+        self._history_len = history_len
+        assert not hasattr(self, 'gru'), "no RRN in my multi-head-attention network!"
+        if policy.endswith('tc'):
             attention_layer = TemporalAttentionPooling(self._encoder_size)
-        elif policy == 'mha':
+        elif policy.endswith('mha'):
             attention_layer = NaiveHistoryAttention(self._encoder_size, 2)
         else:
             raise NotImplementedError("Don't what are you talking about? {}-attention?".format(policy))
         self.attention_layer = CachedAttention(attention_layer, history_len)
 
-    def forward(self, input, cached_history, masks, **kwargs):
+    @property
+    def internal_state_shape(self):
+        return (self._history_len, self._encoder_size)
 
+    @property
+    def is_sequential(self):
+        return True
+
+    def forward(self, input, cached_history, masks, **kwargs):
         x = self.obs_encoder(input['obs'])
 
-        x, cached_history = self.attention_layer(input, cached_history, masks)
+        x, cached_history = self._forward_attn(x, cached_history, masks)
+        #x, cached_history = self.attention_layer(x, cached_history, masks)
 
         return self.critic_linear(x), x, cached_history
+
+    def _forward_attn(self, x, cached_history, masks):
+        N = cached_history.size(0)
+        obs_batch_size = x.size(0)
+        if obs_batch_size == N:
+            x, cached_history = self.attention_layer(x, cached_history, masks)
+            return x, cached_history
+        else:
+            T = obs_batch_size // N
+            x = x.view(T,N, x.size(1))
+            masks = masks.view(T,N)
+            outputs = []
+            for t in range(T):
+                out, cached_history = self.attention_layer(x[t], cached_history, masks[t])
+                outputs.append(out)
+
+            outputs = th.cat(outputs, dim=0)
+            return outputs, cached_history

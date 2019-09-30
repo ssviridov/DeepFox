@@ -83,17 +83,18 @@ class NaiveHistoryAttention(nn.Module):
 
 
 class CachedAttention(nn.Module):
+
     def __init__(self, attn_module, history_len):
         super(CachedAttention, self).__init__()
         self.attn_module = attn_module
         self.history_len = history_len
-        self.cache = deque(history_len)
+        self.cache = deque(maxlen=history_len)
 
     def forward(self, input, attn_cache, mask):
-        history_window = th.cat(tuple(attn_cache), dim=1)
-        history_window[~mask] = 0.
-        result = self.attn_module(input, history_window)
-        attn_cache.append(input)
+        #history_window = th.cat(tuple(attn_cache), dim=1)
+        attn_cache = attn_cache * mask.view(-1,1,1)
+        result = self.attn_module(input, attn_cache)
+        attn_cache = th.cat([attn_cache[:,1:], input.unsqueeze(1)], dim=1)
         return result, attn_cache
 
 if __name__ == "__main__":

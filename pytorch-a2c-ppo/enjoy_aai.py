@@ -111,7 +111,7 @@ configs2reward={}
 configs2success={}
 
 for episode in range(args.num_episodes):
-    rnn_state = torch.zeros(1, actor_critic.recurrent_hidden_state_size).to(device)
+    rnn_state = torch.zeros(1, actor_critic.internal_state_shape).to(device)
 
     masks = torch.zeros(1, 1).to(device)
     obs = env.reset()

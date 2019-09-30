@@ -120,7 +120,7 @@ class AAIBase(NNBase):
             x_extra = self.extra_encoder(inp_extra)
             x = th.cat([x_img, x_extra], dim=1)
 
-        if self.is_recurrent:
+        if self.is_sequential:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
         return self.critic_linear(x), x, rnn_hxs
@@ -237,7 +237,7 @@ class ImageVecMapBase(NNBase):
             x_extra = self.extra_encoder(input)
             x = th.cat([x_img, x_extra], dim=1)
 
-        if self.is_recurrent:
+        if self.is_sequential:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
         return self.critic_linear(x), x, rnn_hxs
@@ -305,7 +305,7 @@ class AttentionIVM(ImageVecMapBase):
             x_extra = self.extra_encoder(flatten_input)
             x = th.cat([x_img, x_extra], dim=1)
 
-        assert not self.is_recurrent, "no RRN in my multi-head-attention network!"
+        assert not self.is_sequential, "no RRN in my multi-head-attention network!"
 
         x = x.view(*batch_shape, *x.shape[1:])
         x = self.attention_layer(x)
@@ -361,7 +361,7 @@ class AAIResnet(AAIBase):
             x_extra = self.extra_encoder(inp_extra)
             x = th.cat([x_img, x_extra], dim=1)
 
-        if self.is_recurrent:
+        if self.is_sequential:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
         return self.critic_linear(x), x, rnn_hxs
