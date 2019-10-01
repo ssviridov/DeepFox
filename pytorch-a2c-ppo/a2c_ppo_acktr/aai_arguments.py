@@ -2,6 +2,7 @@ import argparse
 import datetime
 import torch
 import os.path as ospath
+import json
 
 def get_args():
     parser = argparse.ArgumentParser(description='RL')
@@ -16,6 +17,11 @@ def get_args():
         action='store_true',
         default=False,
         help='Training in docker')
+
+    parser.add_argument(
+        '--restart',
+        default=None,
+        help='Path to model checkpoint')
 
     parser.add_argument(
         '--config-dir',
@@ -190,6 +196,14 @@ def get_args():
     args = parser.parse_args()
 
     args.cuda = not args.no_cuda and torch.cuda.is_available()
+
+    if args.restart:
+        d = vars(args)
+        config_path = ospath.dirname(args.restart)
+        with open(config_path + '/train_args.json', 'r') as f:
+            config = json.load(f)
+        for k, v in config.items():
+            d[k] = v
 
     if not getattr(args, 'experiment_tag', None):
         date = datetime.datetime.now()

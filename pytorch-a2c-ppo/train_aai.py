@@ -36,7 +36,8 @@ class DummySaver(object):
         self.args = args
         self.save_every_updates = args.save_interval
         self.save_subdir = self._build_save_path(args)
-        self.save_args()
+        if not args.restart:
+            self.save_args()
         self.model_path = os.path.join(self.save_subdir, "under-{}0M-steps.pt")
         self.best_model_path = os.path.join(self.save_subdir, "best.pt")
 
@@ -160,26 +161,34 @@ def main():
     )
 
     #Create Agent:
-    args.base_network_args = {
-        'recurrent': args.recurrent_policy,
-        'extra_obs': args.extra_obs,
-        'hidden_size': 512,
-        'map_dim': 384,  # 'extra_encoder_dim':384,
-        'image_dim': 512,
-        #    'freeze_resnet':True,
-    }
-    network_class = ImageVecMap3
-    args.network_cls = network_class.__name__
+    if not args.restart:
+        args.base_network_args = {
+            'recurrent': args.recurrent_policy,
+            'extra_obs': args.extra_obs,
+            'hidden_size': 512,
+            'map_dim': 384,  # 'extra_encoder_dim':384,
+            'image_dim': 512,
+            #    'freeze_resnet':True,
+        }
+        network_class = ImageVecMap3
+        args.network_cls = network_class.__name__
 
-    actor_critic = AAIPolicy(
-        envs.observation_space,
-        envs.action_space,
-        base=network_class,
-        base_kwargs=args.base_network_args
-    )
+        actor_critic = AAIPolicy(
+            envs.observation_space,
+            envs.action_space,
+            base=network_class,
+            base_kwargs=args.base_network_args
+        )
 
-    args.network_architecture=repr(actor_critic)
+    else:
+        print("Loading model...")
+        data = torch.load(args.restart)
+        actor_critic = data['model']
+        updates_done = data['num_updates']
+        args.total_updates = int((args.total_updates - updates_done)*args.num_steps*args.num_processes) // steps_per_update
+
     actor_critic.to(device)
+    args.network_architecture = repr(actor_critic)
 
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(
@@ -284,15 +293,23 @@ def main():
 
             rollouts.after_update()
 
+            if args.restart:
+                curr_update_old = curr_update
+                curr_update = curr_update + updates_done
+
             curr_steps = (curr_update + 1) * args.num_processes * args.num_steps
 
             if curr_update % args.log_interval == 0 and len(episode_rewards):
+                if args.restart:
+                    fps = int(((curr_update_old + 1) * args.num_processes * args.num_steps)/(time.time()-start_time))
+                else:
+                    fps = int(curr_steps/(time.time()-start_time))
                 log_progress(
-                    summary,curr_update, curr_steps,
+                    summary, curr_update, curr_steps,
                     episode_rewards, episode_success, episode_len,
                     episode_visited,
                     dist_entropy, value_loss, action_loss,
-                    fps=int(curr_steps/(time.time()-start_time)),
+                    fps=fps,
                     loop_fps=int(steps_per_update/(time.time()-loop_start_time))
                 )
 
