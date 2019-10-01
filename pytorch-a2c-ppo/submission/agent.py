@@ -11,7 +11,7 @@ import itertools as it
 import numpy as np
 from a2c_ppo_acktr.preprocessors import GridOracle, GridOracleWithAngles, MetaObs
 #change this path to specify a model you want to submit:
-DOCKER_CONFIG_PATH = '/aaio/data/pretrained/meta-arch/sub_config.yaml'
+DOCKER_CONFIG_PATH = '/aaio/data/sub_config.yaml'
 
 
 class ActionAdapter(object):
