@@ -241,6 +241,7 @@ def main():
     summary = SummaryWriter(args.summary_dir)
     try:
         for curr_update in range(args.total_updates):
+
             loop_start_time = time.time()
             if args.use_linear_lr_decay:
                 # decrease learning rate linearly
