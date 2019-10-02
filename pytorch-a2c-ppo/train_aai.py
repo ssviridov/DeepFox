@@ -48,7 +48,7 @@ class DummySaver(object):
             lt_steps = str((total_step // 10000000) + 1)
             save_path = self.model_path.format(lt_steps)
             print('Model saved in {} (quality={:.2f})'.format(save_path, quality))
-            data = {'num_updates':num_updates, "model":model, "optim":optim}
+            data = {'num_updates':num_updates, "model": model, "optim": optim.state_dict()}
             torch.save(data, save_path)
             if self.best_quality < quality:
                 print('Model saved as {}'.format(self.best_model_path))
@@ -219,6 +219,9 @@ def main():
             args.entropy_coef,
             acktr=True)
 
+    if args.restart:
+        agent.optimizer.load_state_dict(data['optim'])
+
     rollouts = create_storage(
         args.num_steps, args.num_processes,
         envs.observation_space, envs.action_space,
@@ -317,7 +320,7 @@ def main():
             if len(episode_rewards) == episode_rewards.maxlen:
                 model_saver.save_model(
                     curr_update, curr_steps,
-                    np.mean(episode_success), actor_critic
+                    np.mean(episode_success), actor_critic, agent.optimizer
                 )
 
     finally:
