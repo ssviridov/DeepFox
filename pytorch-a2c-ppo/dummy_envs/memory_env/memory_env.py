@@ -62,6 +62,7 @@ class DummyMemory(gym.Env):
 
     def step(self, action):
 
+        self.t += 1
         if self.t >= self.length:
             if self._internal_state == "left":
                 r = 1. if action == 0 else -1.
@@ -78,7 +79,6 @@ class DummyMemory(gym.Env):
             }
 
         else:
-            self.t += 1
             return self.make_obs(self.t), 0., False, {}
 
     def reset(self):

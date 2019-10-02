@@ -52,19 +52,27 @@ FixedBernoulli.mode = lambda self: torch.gt(self.probs, 0.5).float()
 
 
 class Categorical(nn.Module):
-    def __init__(self, num_inputs, num_outputs):
+    def __init__(self, num_inputs, num_outputs, two_layers=False):
         super(Categorical, self).__init__()
 
-        init_ = lambda m: init(
+        init_ = lambda m, gain: init(
             m,
             nn.init.orthogonal_,
             lambda x: nn.init.constant_(x, 0),
-            gain=0.01)
+            gain=gain)
 
-        self.linear = init_(nn.Linear(num_inputs, num_outputs))
+        if two_layers:
+            tanh_gain = nn.init.calculate_gain('tanh')
+            self.policy_head = nn.Sequential(
+                init_(nn.Linear(num_inputs, num_inputs), tanh_gain),
+                nn.Tanh(),
+                init_(nn.Linear(num_inputs, num_outputs), 1)
+            )
+        else:
+            self.policy_head = init_(nn.Linear(num_inputs, num_outputs),0.01)
 
     def forward(self, x):
-        x = self.linear(x)
+        x = self.policy_head(x)
         return FixedCategorical(logits=x)
 
 

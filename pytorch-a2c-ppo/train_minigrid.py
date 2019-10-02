@@ -1,4 +1,3 @@
-import os
 import time
 from collections import deque
 
@@ -6,76 +5,18 @@ import numpy as np
 import torch
 
 from a2c_ppo_acktr import algo, utils
-from a2c_ppo_acktr.aai_arguments import get_args
-from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_models import AAIPolicy, \
-    ImageVecMapBase, AttentionIVM
+from dummy_envs.minigrid.minigrid_args import get_args
+from dummy_envs.minigrid.minigrid_env import make_vec_minigrid
+from dummy_envs.memory_models import DummyPolicy, DummyMLP, MLPWithAttention, MLPWithCachedAttention
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
-from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
-import json
 from tensorboardX import SummaryWriter
-
-
-def ensure_dir(file_path):
-    """
-    Checks if the containing directories exist,
-    and if not, creates them.
-    """
-    directory = os.path.dirname(file_path)
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-
-class DummySaver(object):
-
-    def __init__(self, args):
-        super(DummySaver, self).__init__()
-        self.best_quality = float('-inf')
-        self.args = args
-        self.save_every_updates = args.save_interval
-        self.save_subdir = self._build_save_path(args)
-        self.save_args()
-        self.model_path = os.path.join(self.save_subdir, "under-{}0M-steps.pt")
-        self.best_model_path = os.path.join(self.save_subdir, "best.pt")
-
-    def save_model(self, num_updates, total_step, quality, model, optim=None):
-        if num_updates % self.save_every_updates == 0 or num_updates == (self.args.total_updates-1):
-            # 9950k goes into under-10M-steps.pt
-            # 10200k goes into under-20M-steps.pt
-            lt_steps = str((total_step // 10000000) + 1)
-            save_path = self.model_path.format(lt_steps)
-            print('Model saved in {} (quality={:.2f})'.format(save_path, quality))
-            data = {'num_updates':num_updates, "total_step":total_step, "model":model, "optim":optim}
-            torch.save(data, save_path)
-            if self.best_quality < quality:
-                print('Model saved as {}'.format(self.best_model_path))
-                self.best_quality = quality
-                torch.save(data, self.best_model_path)
-
-    def _build_save_path(self, args):
-        assert hasattr(args, 'experiment_tag'), 'Please specify --experiment-tag, -et'
-        save_subdir = os.path.join(args.save_dir, args.experiment_tag)
-        return save_subdir
-
-    def save_args(self, file_name='train_args.json', exclude_args=tuple()):
-        args = self.args
-        folder = self.save_subdir
-
-        save_args = {k:v for k, v in vars(args).items() if k not in exclude_args}
-        file_path = os.path.join(folder, file_name)
-        ensure_dir(file_path)
-        with open(file_path, 'w') as f:
-            status = json.dump(save_args, f, sort_keys=True, indent=2)
-
-        print('Train arguments saved in {}'.format(file_path))
-        return status
+from train_aai import DummySaver, args_to_str
 
 def log_progress(summary,
         curr_update, curr_step, ep_rewards, ep_success, ep_len,
-        ep_visited, dist_entropy, value_loss, action_loss,
-        fps, loop_fps,
+        dist_entropy, value_loss, action_loss, fps, loop_fps,
 ):
     mean_r = np.mean(ep_rewards)
     median_r = np.median(ep_rewards)
@@ -83,20 +24,18 @@ def log_progress(summary,
     max_r = np.max(ep_rewards)
     mean_success = np.mean(ep_success)
     mean_eplen = np.mean(ep_len)
-    mean_visited = np.mean(ep_visited)
     print(
         "Updates {}, num_steps {}, FPS/Loop FPS {}/{} \n"
         "Last {} episodes:\n  mean/median R {:.2f}/{:.2f}, min/max R {:.1f}/{:.1f}\n"
-        "  mean success {:.2f},  mean length {:.1f}, mean visted {:.1f}\n".format(
+        "  mean success {:.2f},  mean length {:.1f}\n".format(
             curr_update, curr_step, fps, loop_fps,
             len(ep_rewards), mean_r, median_r,
-            min_r, max_r, mean_success, mean_eplen, mean_visited
+            min_r, max_r, mean_success, mean_eplen,
         )
     )
 
     if summary is None: return
-    summary.add_scalar("Env/r-mean", mean_r, curr_step)
-    summary.add_scalar("Env/r-median", median_r, curr_step)
+    summary.add_scalar("Env/reward-mean", mean_r, curr_step)
     summary.add_scalar("Env/success", mean_success, curr_step)
     summary.add_scalar("Env/episode-len", mean_eplen, curr_step)
 
@@ -104,23 +43,14 @@ def log_progress(summary,
     summary.add_scalar('Loss/critic', value_loss, curr_step)
     summary.add_scalar('Loss/actor', action_loss, curr_step)
 
-    summary.add_scalar("Performance/total-fps", fps, curr_step)
-    summary.add_scalar("Performance/loop-fps", loop_fps, curr_step)
-
-
-def args_to_str(args):
-    lines = ['','ARGUMENTS:']
-    newline = os.linesep
-    args = vars(args)
-    for key in sorted(args.keys()):
-        lines.append('    "{0}": {1}'.format(key, args[key]))
-    return newline.join(lines)
+    summary.add_scalar("Performance/FPS", fps, curr_step)
 
 
 def main():
     args = get_args()
     if args.seed is None:
         args.seed = np.random.randint(1000)
+
     steps_per_update = args.num_steps*args.num_processes
     args.total_updates = int(args.num_env_steps) // steps_per_update
 
@@ -135,49 +65,38 @@ def main():
     torch.set_num_threads(1)
     device = torch.device("cuda:0" if args.cuda else "cpu")
 
-    #Create Environment:
-    gen_config = ListSampler.create_from_dir(args.config_dir)
-    #gen_config = SingleConfigGenerator.from_file(
-    #    "aai_resources/new_configs/mazes/chess_walls.yaml")
-        #"aai_resources/test_configs/MySample2.yaml"
-    #    "aai_resources/default_configs/1-Food.yaml"
-    args.real_oracle_args = dict(
-        oracle_type="angles",
-        oracle_reward=args.oracle_reward,
-        num_angles=args.oracle_num_angles,
-        cell_side=args.oracle_cell_side,
-        # trace_decay=0.992, # randomly
-    )
-
-    envs = make_vec_envs_aai(
-        args.env_path, gen_config, args.seed, args.num_processes,
-        device, num_frame_stack=args.frame_stack,
-        headless=args.headless,
-        grid_oracle_kwargs=args.real_oracle_args,
-        image_only=len(args.extra_obs) == 0,
-    )
-
-    #Create Agent:
     args.base_network_args = {
-        'recurrent': args.recurrent_policy,
-        'extra_obs': args.extra_obs,
-        'hidden_size': 512,
-        'map_dim': 384,  # 'extra_encoder_dim':384,
-        'image_dim': 512,
-        #    'freeze_resnet':True,
+        'policy':args.policy,
+        'encoder_size':args.hidden_size,
+        # 'freeze_encoder':False,
     }
 
-    network_class = AttentionIVM
-    args.network_cls = network_class.__name__
+    if args.policy in ['rnn', 'ff']:
+        BaseNet = DummyMLP
 
-    actor_critic = AAIPolicy(
-        envs.observation_space,
-        envs.action_space,
-        base=network_class,
-        base_kwargs=args.base_network_args
+    elif args.policy.startswith('cached'):
+        BaseNet = MLPWithCachedAttention
+        args.base_network_args['history_len'] = args.frame_stack - 1
+        args.frame_stack = 1
+    else:
+        BaseNet = MLPWithAttention
+
+    envs = make_vec_minigrid(args.game,
+        args.num_processes, args.seed, device,
+        args.frame_stack,
+        image_only_stack=(args.policy not in ['tc', 'mha'])
     )
 
-    args.network_architecture=repr(actor_critic)
+    actor_critic = DummyPolicy(
+        envs.observation_space,
+        envs.action_space,
+        base=BaseNet, #MLPWithAttention,
+        base_kwargs=args.base_network_args
+    )
+    args.network_architecture = repr(actor_critic)
+
+    print("MODEL:")
+    print(actor_critic)
     actor_critic.to(device)
 
     if args.algo == 'a2c':
@@ -212,23 +131,23 @@ def main():
     rollouts = create_storage(
         args.num_steps, args.num_processes,
         envs.observation_space, envs.action_space,
-        actor_critic.recurrent_hidden_state_size
+        actor_critic.internal_state_shape
     )
 
     obs = envs.reset()
     rollouts.obs[0].copy_(obs)
     rollouts.to(device)
 
-    episode_rewards = deque(maxlen=200)
-    episode_success = deque(maxlen=200)
-    episode_len = deque(maxlen=200)
-    episode_visited = deque(maxlen=200)
+    episode_rewards = deque(maxlen=150)
+    episode_success = deque(maxlen=150)
+    episode_len = deque(maxlen=150)
 
     print(args_to_str(args))
 
     start_time = time.time()
     model_saver = DummySaver(args)
     summary = SummaryWriter(args.summary_dir)
+
     try:
         for curr_update in range(args.total_updates):
             loop_start_time = time.time()
@@ -243,9 +162,9 @@ def main():
                 with torch.no_grad():
 
                     #assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!
-                    value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                        obs, #rollouts.obs[step],
-                        rollouts.recurrent_hidden_states[step],
+                    value, action, action_log_prob, internal_state = actor_critic.act(
+                        obs, #rollouts.obs[step], rollouts.obs[step-obs_stack+1:step+1],
+                        rollouts.internal_states[step],
                         rollouts.masks[step])
 
                 #/no_grad
@@ -257,8 +176,6 @@ def main():
                         episode_rewards.append(info['episode_reward'])
                         episode_success.append(info['episode_success'])
                         episode_len.append(info['episode_len'])
-                        if "grid_oracle" in info:
-                            episode_visited.append(info["grid_oracle"]["n_visited"])
 
                 # If done then clean the history of observations.
                 masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done])
@@ -267,14 +184,14 @@ def main():
                      for info in infos]
                 )
 
-                rollouts.insert(obs, recurrent_hidden_states, action,
+                rollouts.insert(obs, internal_state, action,
                                 action_log_prob, value, reward, masks, bad_masks)
 
             with torch.no_grad():
     #            assert torch.equal(obs['image'], rollouts.obs[-1].asdict()['image']), 'woy!! this is strange!'
                 next_value = actor_critic.get_value(
                     obs, #rollouts.obs[-1],
-                    rollouts.recurrent_hidden_states[-1],
+                    rollouts.internal_states[-1],
                     rollouts.masks[-1]).detach()
 
 
@@ -290,9 +207,8 @@ def main():
             if curr_update % args.log_interval == 0 and len(episode_rewards):
                 log_progress(
                     summary,curr_update, curr_steps,
-                    episode_rewards, episode_success, episode_len,
-                    episode_visited,
-                    dist_entropy, value_loss, action_loss,
+                    episode_rewards, episode_success,
+                    episode_len, dist_entropy, value_loss, action_loss,
                     fps=int(curr_steps/(time.time()-start_time)),
                     loop_fps=int(steps_per_update/(time.time()-loop_start_time))
                 )

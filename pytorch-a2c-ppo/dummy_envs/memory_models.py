@@ -3,12 +3,25 @@ from a2c_ppo_acktr.model import CNNBase, NNBase, Bernoulli,\
     Categorical, DiagGaussian, MLPBase, Flatten, Policy
 from torch import nn
 import torch as th
-from a2c_ppo_acktr.utils import init, conv_output_shape
+from a2c_ppo_acktr.utils import conv_output_shape
 import numpy as np
 import gym
+from a2c_ppo_acktr.model import Flatten
 
 from a2c_ppo_acktr.aai_layers import \
     TemporalAttentionPooling, NaiveHistoryAttention, CachedAttention
+
+
+def init(module, weight_init, bias_init, nl):
+    gain = nn.init.calculate_gain(nl)
+    weight_init(module.weight.data, gain=gain)
+    bias_init(module.bias.data)
+    return module
+
+def default_init(module, gain):
+    return init(
+        module, nn.init.orthogonal_, lambda x:nn.init.constant_(x, 0), gain
+    )
 
 class DummyPolicy(Policy):
     def __init__(self, obs_space, action_space, base=None, base_kwargs=None):
@@ -21,7 +34,7 @@ class DummyPolicy(Policy):
 
         if action_space.__class__.__name__ == "Discrete":
             num_outputs = action_space.n
-            self.dist = Categorical(self.base.output_size, num_outputs)
+            self.dist = Categorical(self.base.output_size, num_outputs, two_layers=True)
         elif action_space.__class__.__name__ == "Box":
             num_outputs = action_space.shape[0]
             self.dist = DiagGaussian(self.base.output_size, num_outputs)
@@ -59,23 +72,45 @@ class DummyMLP(NNBase):
             return {"image": obs_space.shape}
 
     def _create_critic(self):
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0))
-        self.critic_linear = init_(nn.Linear(self._hidden_size, 1))
+
+        self.critic_linear =nn.Sequential(
+            default_init(nn.Linear(self._hidden_size, self._hidden_size),'tanh'),
+            nn.Tanh(),
+            default_init(nn.Linear(self._hidden_size, 1),'linear')
+        )
 
     def _create_obs_encoder(self):
-        num_inputs = self.obs_shapes['obs'][-1]
-        init_ = lambda m: init(
-            m, nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            nn.init.calculate_gain("relu")
-        )
 
-        self.obs_encoder = nn.Sequential(
-            init_(nn.Linear(num_inputs, self._encoder_size)), nn.ReLU(),
-            #init_(nn.Linear(self._hidden_size, self._hidden_size)), nn.ReLU()
-        )
+        if 'obs' in self.obs_shapes:
+            num_inputs = self.obs_shapes['obs'][-1]
+
+            self.obs_encoder = nn.Sequential(
+                default_init(nn.Linear(num_inputs, self._encoder_size),'relu'),
+                nn.ReLU()
+            )
+        elif 'image' in self.obs_shapes:
+            *_, C,H,W = self.obs_shapes['image']
+            self.obs_encoder = nn.Sequential(
+                nn.Conv2d(3, 16, (2, 2)),
+                nn.ReLU(),
+                nn.MaxPool2d((2, 2)),
+                nn.Conv2d(16, 32, (2, 2)),
+                nn.ReLU(),
+                nn.Conv2d(32, 64, (2, 2)),
+                nn.ReLU(),
+                #init_(nn.Conv2d(C, self._encoder_size, kernel_size=(H,W))),
+                #nn.ReLU(),
+                Flatten(),
+            )
+
+    def _prepare_data(self, input):
+        if 'obs' in input:
+            return input
+        else:
+            return {'obs':input['image']}
 
     def forward(self, input, rnn_hxs, masks, **kwargs):
+        input = self._prepare_data(input)
         x = self.obs_encoder(input['obs'])
 
         if self.is_sequential:
@@ -117,7 +152,7 @@ class MLPWithAttention(DummyMLP):
         batch_shapes = {}
         flatten_input = {}
         for k,v in input.items():
-            n_data_dims =  1 #if k in self._vector_obs else 3
+            n_data_dims = 3 if len(v.shape) > 3 else 1
             data_shape = v.shape[-n_data_dims:]
             batch_shapes[k] = v.shape[:-n_data_dims]
             flatten_input[k] = v.view(-1, *data_shape)
@@ -134,6 +169,7 @@ class MLPWithAttention(DummyMLP):
         return unflatten
 
     def forward(self, input, rnn_hxs, masks, **kwargs):
+        input = self._prepare_data(input)
         flatten_input, batch_shapes = self._flatten_batch(input)
         batch_shape = batch_shapes['obs']
 
@@ -175,6 +211,7 @@ class MLPWithCachedAttention(DummyMLP):
         return True
 
     def forward(self, input, cached_history, masks, **kwargs):
+        input = self._prepare_data(input)
         x = self.obs_encoder(input['obs'])
 
         x, cached_history = self._forward_attn(x, cached_history, masks)

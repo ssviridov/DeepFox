@@ -1,4 +1,3 @@
-import os
 import time
 from collections import deque
 
@@ -6,14 +5,14 @@ import numpy as np
 import torch
 
 from a2c_ppo_acktr import algo, utils
-from dummy_envs.memory_env_args import get_args
-from dummy_envs.memory_env import make_vec_dummy_memory
+from dummy_envs.memory_env.memory_env_args import get_args
+from dummy_envs.memory_env.memory_env import make_vec_dummy_memory
 from dummy_envs.memory_models import DummyPolicy, DummyMLP, MLPWithAttention, MLPWithCachedAttention
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
 from tensorboardX import SummaryWriter
-from train_aai import DummySaver, ensure_dir, args_to_str
+from train_aai import DummySaver, args_to_str
 
 def log_progress(summary,
         curr_update, curr_step, ep_rewards, ep_success, ep_len,
