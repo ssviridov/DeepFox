@@ -18,7 +18,7 @@ from a2c_ppo_acktr.envs import TransposeImage, VecPyTorch, VecPyTorchFrameStack,
 from .aai_config_generator import SingleConfigGenerator
 from .aai_env_fixed import UnityEnvHeadless
 from .preprocessors import GridOracle, GridOracleWithAngles, MetaObs
-
+import threading
 import torch
 
 def rotate(vec, angle):
@@ -32,7 +32,7 @@ def rotate(vec, angle):
 
 class AnimalAIWrapper(gym.Env):
 
-    ENV_RELOAD_PERIOD = 600 #total update period( with num_processes==16) will be in range [2M, 6M] steps
+    ENV_RELOAD_PERIOD = 1200 #total update period( with num_processes==16) will be in range [2M, 6M] steps
 
     def __init__(self, env_path, rank, config_generator,
                  action_repeat=1, docker_training=False,
@@ -91,8 +91,8 @@ class AnimalAIWrapper(gym.Env):
         #worker id is changed to fix problem with linux sockets that wait for 60 seconds after closing
         self._env_args['worker_id'] = self._worker_id_pair[0]
         self._worker_id_pair = self._worker_id_pair[::-1]
-        print("Reloading Env#{}: episode: {}, sleep={}s".format(
-            self._env_args['worker_id'], self.num_episode, 0.
+        print("Reloading Env#{}: episode: {}, active_threads={}".format(
+            self._env_args['worker_id'], self.num_episode, threading.active_count()
         ))
         # change UnityEnvHeadless to UnityEnvironment and remove headless arg
         # if you want to return to the animalai version of environemt

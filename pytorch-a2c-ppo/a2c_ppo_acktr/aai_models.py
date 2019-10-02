@@ -306,13 +306,20 @@ class ImageVecMap2(NNBase):
             num_channels, H, W = self._obs_shapes['visited']
             init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                    constant_(x, 0), nn.init.calculate_gain('relu'))
+            if H > 16:
+                c_kernel, c_stride = 4, 2
+                c_pad = (H % 2)
+                c_channels = 64
+            else:
+                c_kernel, c_stride, c_pad = 3, 1, 0
+                c_channels = 16
 
             encoder = OrderedDict([
-                ("conv1", init_(nn.Conv2d(num_channels, 32, 3, 1))),
+                ("conv1", init_(nn.Conv2d(num_channels, 32, c_kernel, c_stride,padding=c_pad))),
                 ("relu1", nn.ReLU()),  # was num_channes -> 16
-                ('conv2', init_(nn.Conv2d(32, 32, 3, 1))),
+                ('conv2', init_(nn.Conv2d(32, 32, c_kernel, c_stride, padding=c_pad))),
                 ('relu2', nn.ReLU()),  # was 16, -> 32
-                ('conv3', init_(nn.Conv2d(32, 16, 3, 1))),
+                ('conv3', init_(nn.Conv2d(32, c_channels, 3, 1))),
                 #('maxpool3'), nn.MaxPool2d(2,2),
                 ('relu3', nn.ReLU()),  # was AvgPool2D without relu
                 ('faltten4', Flatten()),
