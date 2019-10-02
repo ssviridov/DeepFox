@@ -143,6 +143,7 @@ def main():
     #    "aai_resources/new_configs/mazes/chess_walls.yaml")
         #"aai_resources/test_configs/MySample2.yaml"
     #    "aai_resources/default_configs/1-Food.yaml"
+
     args.real_oracle_args = dict(
         oracle_type="angles",
         oracle_reward=args.oracle_reward,
@@ -219,7 +220,7 @@ def main():
             args.entropy_coef,
             acktr=True)
 
-    if args.restart:
+    if args.restart and (data['optim'] is not None):
         agent.optimizer.load_state_dict(data['optim'])
 
     rollouts = create_storage(
