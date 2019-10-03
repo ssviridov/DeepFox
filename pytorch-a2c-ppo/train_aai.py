@@ -135,7 +135,7 @@ def main():
         torch.backends.cudnn.deterministic = True
 
     torch.set_num_threads(1)
-    device = torch.device("cuda:0" if args.cuda else "cpu")
+    device = torch.device("cuda:{}".format(args.device) if args.cuda else "cpu")
 
     #Create Environment:
     gen_config = HierarchicalSampler.create_from_dir(args.config_dir)

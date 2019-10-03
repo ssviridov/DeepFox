@@ -174,10 +174,10 @@ def get_args():
              '(default: <current-time>)'
     )
     parser.add_argument(
-        '--no-cuda',
-        action='store_true',
-        default=False,
-        help='disables CUDA training')
+        '--device',
+        type=int,
+        default=0,
+        help='choose your gpu device, if device == -1 then use cpu!')
     parser.add_argument(
         '--use-proper-time-limits',
         action='store_true',
@@ -195,7 +195,7 @@ def get_args():
         help='use a linear schedule on the learning rate')
     args = parser.parse_args()
 
-    args.cuda = not args.no_cuda and torch.cuda.is_available()
+    args.cuda = args.device >= 0 and torch.cuda.is_available()
 
     if args.restart:
         d = vars(args)
