@@ -70,7 +70,7 @@ if args.seed is None:
     args.seed = np.random.randint(1000)
 
 device = torch.device("cuda:0" if args.cuda else "cpu")
-gen_config = ListSampler.create_from_dir(args.config_dir)
+gen_config = HierarchicalSampler.create_from_dir(args.config_dir)
 #gen_config = SingleConfigGenerator.from_file("aai_resources/test_configs/time_limits/empty_yellow.yaml")
 
 train_args = load_args(os.path.dirname(args.model_path))
@@ -158,5 +158,7 @@ print('Mean success: {:0.2f}'.format(np.mean(episode_success)))
 print("Mean Steps: {:0.1f}".format(np.mean(episode_steps)))
 print()
 for k in sorted(configs2reward.keys()):
-    v = configs2reward[k]
-    print("{}: {:0.2f} avr reward".format(k, np.mean(v)))
+    rs = configs2reward[k]
+    successes = configs2success[k]
+    print("{}: num_runs: {}, mean R: {:0.2f}, success: {:0.2f}".format(
+        k, len(rs), np.mean(rs), np.mean(successes)))
