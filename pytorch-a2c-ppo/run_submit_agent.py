@@ -48,7 +48,7 @@ if __name__ == "__main__":
     from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
     #gen_config = ListSampler.create_from_dir("aai_resources/default_configs/")
     gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/1-Food.yaml")
-    agent = Agent('submission/data/sub_config.yaml')
+    agent = Agent('submission/data/pretrained/default-configs-ivm3/sub_config.yaml')
     env = create_env(3)
 
     #config = gen_config.next_config()
@@ -63,8 +63,8 @@ if __name__ == "__main__":
         config, name = get_next_config(gen_config)
         print('Episode {} starting: {}'.format(k, name))
         env.reset(config)
+        agent.reset(t=config.arenas[0].t)
         try:
-            agent.reset()
             #obs: tuple(84,84,3),(3,), reward: int, done: bool, info: dict{"brain_info":..., ..}
             obs, reward, done, info = env.step([0, 0])
 

@@ -9,8 +9,8 @@ from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator
 import cv2
 
 aai_path = "aai_resources/env/AnimalAI"
-aai_config_dir = "aai_resources/test_configs/" #"aai_resources/test_configs/"
-curr_config = aai_config_dir + "MySample.yaml" #"exampleConfig.yaml"
+aai_config_dir = "aai_resources/new_configs/" #"aai_resources/test_configs/"
+curr_config = aai_config_dir + "mazes/5_walls/5_walls_gold.yaml" #"exampleConfig.yaml"
 
 
 class EnvInteractor(SimpleImageViewer):
@@ -114,12 +114,14 @@ def main():
     rank = np.random.randint(0, 1000)
     viewer = EnvInteractor()
     gen_config = SingleConfigGenerator.from_file(curr_config)
+    gen_config.config.arenas[0].t = 5000
     make = make_env_aai(
         aai_path, gen_config, rank, False,
         grid_oracle_kwargs=dict(
             oracle_type="angles",
             trace_decay=1.,# 0.9999,
-            num_angles=3
+            num_angles=3,
+            cell_side=2,
         ),
         channel_first=False,
         image_only=False
@@ -155,6 +157,11 @@ def concat_images(image, map_view):
 def angle360(obs):
     return (obs['angle'][0]+1.)*180.
 
+def color_filter(image, color):
+    has_color = np.logical_and.reduce(image==np.asarray(color), 2)*255
+    has_color = np.stack([has_color]*3, 2)
+    return np.concatenate([image, has_color], axis=1)
+
 def record_episode(seed, env, viewer, obs):
 
     action_log = []
@@ -182,17 +189,18 @@ def record_episode(seed, env, viewer, obs):
         total_steps[0] += 1
 
         time.sleep(0.025)
-
+        color = obs['image'][42,42]
         print("\rstep#{} speed_r={:0.4f} angle={:.1f}, pos=({:.2f}, {:.2f}, {:.2f}),"
-              " speed=({:.2f}, {:.2f}, {:.2f}), n_visited={}, expl_r={}".format(
+              " speed=({:.2f}, {:.2f}, {:.2f}), n_visited={}, expl_r={}, pixel[42,42]: {}".format(
             total_steps[0], speed_reward,
             (angle+1.)*180, x*70,z*70,y*70, dx*10,dz*10,dy*10,
-            info['grid_oracle']['n_visited'], info['grid_oracle']['r'] # rew
+            info['grid_oracle']['n_visited'],
+            info['grid_oracle']['r'], color.astype(int) # rew
         ), end="")
 
         #if info['grid_oracle']['r'] > 0.0:
         #    print("\nr={}".format(info['grid_oracle']['r']))
-
+        #img = color_filter(obs['image'], [153.,153.,153.])
         img = concat_images(obs['image'], obs['visited'])
         #print("VISITED:\n", obs['visited'][0])
         #map_window.imshow(map2img(obs['visited']))

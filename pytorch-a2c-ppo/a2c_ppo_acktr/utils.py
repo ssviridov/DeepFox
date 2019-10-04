@@ -1,6 +1,6 @@
 import glob
 import os
-
+import json
 import torch
 import torch.nn as nn
 
@@ -71,6 +71,6 @@ def conv_output_shape(input_shape, layers):
         if isinstance(layers, dict):
             for k, l in layers.items():
                 x = l(x)
-            return x.shape
+            return x.shape[1:]
 
         return layers(x).shape[1:]

@@ -1,0 +1,30 @@
+!ArenaConfig
+arenas:
+  0: !Arena
+    t: 1000
+    items:
+    - !Item
+      name: GoodGoalMulti
+      sizes:
+        - !Vector3 {x: 2.1, y: 2.1, z: 2.1}
+    - !Item
+      name: GoodGoalMulti
+    - !Item
+      name: GoodGoalMulti
+      sizes:
+        - !Vector3 {x: 1.4, y: 1.4, z: 1.4}
+    - !Item
+      name: GoodGoalMultiBounce
+    - !Item
+      name: BadGoal
+    - !Item
+      name: BadGoalBounce
+    - !Item
+      name: HotZone
+      rotations: [0]
+      sizes:
+        - !Vector3 {x: 4,y: 0 ,z: 40}
+        - !Vector3 {x: 3,y: 0 ,z: 30}
+      positions:
+        - !Vector3 {x: -1,y: 0 ,z: 20}
+        - !Vector3 {x: -1,y: 0 ,z: -1}

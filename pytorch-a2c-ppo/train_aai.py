@@ -1,5 +1,6 @@
 import os
 import time
+import datetime
 from collections import deque
 
 import numpy as np
@@ -8,12 +9,11 @@ import torch
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.aai_arguments import get_args
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_models import AAIPolicy, \
-    ImageVecMapBase, AttentionIVM
+from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMapBase, ImageVecMap2, ImageVecMap3, AttentionIVM
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
-from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
+from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator, HierarchicalSampler
 import json
 from tensorboardX import SummaryWriter
 
@@ -36,7 +36,8 @@ class DummySaver(object):
         self.args = args
         self.save_every_updates = args.save_interval
         self.save_subdir = self._build_save_path(args)
-        self.save_args()
+        if not args.restart:
+            self.save_args()
         self.model_path = os.path.join(self.save_subdir, "under-{}0M-steps.pt")
         self.best_model_path = os.path.join(self.save_subdir, "best.pt")
 
@@ -47,7 +48,7 @@ class DummySaver(object):
             lt_steps = str((total_step // 10000000) + 1)
             save_path = self.model_path.format(lt_steps)
             print('Model saved in {} (quality={:.2f})'.format(save_path, quality))
-            data = {'num_updates':num_updates, "total_step":total_step, "model":model, "optim":optim}
+            data = {'num_updates':num_updates, "total_step":total_step, "model": model, "optim": optim.state_dict()}
             torch.save(data, save_path)
             if self.best_quality < quality:
                 print('Model saved as {}'.format(self.best_model_path))
@@ -100,7 +101,7 @@ def log_progress(summary,
     summary.add_scalar("Env/success", mean_success, curr_step)
     summary.add_scalar("Env/episode-len", mean_eplen, curr_step)
 
-    summary.add_scalar('Loss/enropy', dist_entropy, curr_step)
+    summary.add_scalar('Loss/entropy', dist_entropy, curr_step)
     summary.add_scalar('Loss/critic', value_loss, curr_step)
     summary.add_scalar('Loss/actor', action_loss, curr_step)
 
@@ -133,14 +134,15 @@ def main():
         torch.backends.cudnn.deterministic = True
 
     torch.set_num_threads(1)
-    device = torch.device("cuda:0" if args.cuda else "cpu")
+    device = torch.device("cuda:{}".format(args.device) if args.cuda else "cpu")
 
     #Create Environment:
-    gen_config = ListSampler.create_from_dir(args.config_dir)
+    gen_config = HierarchicalSampler.create_from_dir(args.config_dir)
     #gen_config = SingleConfigGenerator.from_file(
     #    "aai_resources/new_configs/mazes/chess_walls.yaml")
         #"aai_resources/test_configs/MySample2.yaml"
     #    "aai_resources/default_configs/1-Food.yaml"
+
     args.real_oracle_args = dict(
         oracle_type="angles",
         oracle_reward=args.oracle_reward,
@@ -155,30 +157,38 @@ def main():
         headless=args.headless,
         grid_oracle_kwargs=args.real_oracle_args,
         image_only=len(args.extra_obs) == 0,
+        docker_training=args.docker_training
     )
 
     #Create Agent:
-    args.base_network_args = {
-        'recurrent': args.recurrent_policy,
-        'extra_obs': args.extra_obs,
-        'hidden_size': 512,
-        'map_dim': 384,  # 'extra_encoder_dim':384,
-        'image_dim': 512,
-        #    'freeze_resnet':True,
-    }
+    if not args.restart:
+        args.base_network_args = {
+            'recurrent': args.recurrent_policy,
+            'extra_obs': args.extra_obs,
+            'hidden_size': 512,
+            'map_dim': 384,  # 'extra_encoder_dim':384,
+            'image_dim': 512,
+            #    'freeze_resnet':True,
+        }
+        network_class = ImageVecMap3
+        args.network_cls = network_class.__name__
 
-    network_class = AttentionIVM
-    args.network_cls = network_class.__name__
+        actor_critic = AAIPolicy(
+            envs.observation_space,
+            envs.action_space,
+            base=network_class,
+            base_kwargs=args.base_network_args
+        )
 
-    actor_critic = AAIPolicy(
-        envs.observation_space,
-        envs.action_space,
-        base=network_class,
-        base_kwargs=args.base_network_args
-    )
+    else:
+        print("Loading model...")
+        data = torch.load(args.restart)
+        actor_critic = data['model']
+        updates_done = data['num_updates']
+        args.total_updates = int((args.total_updates - updates_done)*args.num_steps*args.num_processes) // steps_per_update
 
-    args.network_architecture=repr(actor_critic)
     actor_critic.to(device)
+    args.network_architecture = repr(actor_critic)
 
     if args.algo == 'a2c':
         agent = algo.A2C_ACKTR(
@@ -209,6 +219,9 @@ def main():
             args.entropy_coef,
             acktr=True)
 
+    if args.restart and (data['optim'] is not None):
+        agent.optimizer.load_state_dict(data['optim'])
+
     rollouts = create_storage(
         args.num_steps, args.num_processes,
         envs.observation_space, envs.action_space,
@@ -231,6 +244,7 @@ def main():
     summary = SummaryWriter(args.summary_dir)
     try:
         for curr_update in range(args.total_updates):
+
             loop_start_time = time.time()
             if args.use_linear_lr_decay:
                 # decrease learning rate linearly
@@ -251,7 +265,6 @@ def main():
                 #/no_grad
                 # Obser reward and next obs
                 obs, reward, done, infos = envs.step(action)
-
                 for info in infos:
                     if 'episode_reward' in info.keys():
                         episode_rewards.append(info['episode_reward'])
@@ -285,15 +298,23 @@ def main():
 
             rollouts.after_update()
 
+            if args.restart:
+                curr_update_old = curr_update
+                curr_update = curr_update + updates_done
+
             curr_steps = (curr_update + 1) * args.num_processes * args.num_steps
 
             if curr_update % args.log_interval == 0 and len(episode_rewards):
+                if args.restart:
+                    fps = int(((curr_update_old + 1) * args.num_processes * args.num_steps)/(time.time()-start_time))
+                else:
+                    fps = int(curr_steps/(time.time()-start_time))
                 log_progress(
-                    summary,curr_update, curr_steps,
+                    summary, curr_update, curr_steps,
                     episode_rewards, episode_success, episode_len,
                     episode_visited,
                     dist_entropy, value_loss, action_loss,
-                    fps=int(curr_steps/(time.time()-start_time)),
+                    fps=fps,
                     loop_fps=int(steps_per_update/(time.time()-loop_start_time))
                 )
 
@@ -301,7 +322,7 @@ def main():
             if len(episode_rewards) == episode_rewards.maxlen:
                 model_saver.save_model(
                     curr_update, curr_steps,
-                    np.mean(episode_success), actor_critic
+                    np.mean(episode_success), actor_critic, agent.optimizer
                 )
 
     finally:

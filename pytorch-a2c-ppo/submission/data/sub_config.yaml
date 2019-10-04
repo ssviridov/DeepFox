@@ -1,7 +1,7 @@
-#model_path: "/aaio/data/pretrained/ppo-visited2/under-30M-steps.pt"
+model_path: "/aaio/data/under-80M-steps.pt"
 #if you are running run_submit_agent.py from pytorch-a2c-ppo
 # directory then use an appropriate path:
-model_path: "submission/data/pretrained/ppo-visited2/under-30M-steps.pt"
+#model_path: "submission/data/pretrained/ppo-visited-avg-pulling/best.pt"
 
 device: "cuda"
 greedy_policy: False
@@ -13,12 +13,14 @@ observation_adapter:
     image_only: False #True
     transpose: True
     unsqueeze: True
-    frame_stack: 6 #2 for ppo_ff.pt
+    frame_stack: 4 #2 for ppo_ff.pt
     stackables: ["image"]
 
     grid_oracle:
         oracle_type: "angles" #map with angle dimension as image channel if True
-        oracle_reward: 0.01 # 0.025
+        cell_side: 2.0
+        num_angles: 15
+        oracle_reward: -0.01
         #penalty_mode: True
         #trace_decay: 0.999
         #exploration_only: False

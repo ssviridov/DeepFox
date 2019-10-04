@@ -17,8 +17,8 @@ from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from a2c_ppo_acktr.envs import VecPyTorch, VecPyTorchFrameStack, VecPyTorchFrameStackDictObs, VecHistoryFrameStack, ShmemVecEnv
 from .aai_config_generator import SingleConfigGenerator
 from .aai_env_fixed import UnityEnvHeadless
-from .preprocessors import GridOracle, GridOracleWithAngles
-
+from .preprocessors import GridOracle, GridOracleWithAngles, MetaObs
+import threading
 import torch
 
 def rotate(vec, angle):
@@ -31,9 +31,14 @@ def rotate(vec, angle):
 
 
 class AnimalAIWrapper(gym.Env):
+
+    ENV_RELOAD_PERIOD = 1200 #total update period( with num_processes==16) will be in range [2M, 6M] steps
+
     def __init__(self, env_path, rank, config_generator,
                  action_repeat=1, docker_training=False,
-                 headless=False, image_only=True, channel_first=True):
+                 headless=False, image_only=True, channel_first=True,
+                 reduced_actions=False):
+
         super(AnimalAIWrapper, self).__init__()
         #if config_generator is None we use random config!
         self.config_generator = config_generator if config_generator else SingleConfigGenerator()
@@ -42,23 +47,28 @@ class AnimalAIWrapper(gym.Env):
         self.image_only=image_only
         self.channel_first = channel_first
 
-        self._set_config(self.config_generator.next_config())
-        #change UnityEnvHeadless to UnityEnvironment and remove headless arg
-        # if you want to return to the animalai version of environemt
-        #self.env = UnityEnvironment(
-        self.env = UnityEnvHeadless( #
+        self.num_episode = 0
+        self.env = None
+        # after self.env is closed socket is still in use for 60 seconds!
+        # so instead of waiting for the old socket we open a new environment on another port:
+        self._worker_id_pair = (rank, rank+200)
+        self._env_args = dict(
             file_name=env_path, worker_id=rank,
             seed=rank, n_arenas=1,
-            arenas_configurations=self.config,
+            arenas_configurations=None,  # self.config,
             docker_training=docker_training,
             headless=headless
         )
+        self._reload_env() #this creates new environment with self._env_args!
+        #self.env = UnityEnvHeadless(**self._env_args)
+        #self._set_config(self.config_generator.next_config())
 
         lookup_func = lambda a: {'Learner':np.array([a], dtype=float)}
-        #if reduced_actions:
-        #    lookup = itertools.product([0,1], [0,1,2])
-        #else:
-        lookup = itertools.product([0,1,2], repeat=2)
+        if reduced_actions:
+            lookup = itertools.product([0,1], [0,1,2])
+        else:
+            lookup = itertools.product([0,1,2], repeat=2)
+
         lookup = dict(enumerate(map(lookup_func, lookup)))
         self.action_map = lambda a: lookup[a]
         
@@ -69,7 +79,25 @@ class AnimalAIWrapper(gym.Env):
         self.pos = np.zeros((3,), dtype=np.float32)
         self.angle = np.zeros((1,), dtype=np.float32)
 
-        print("Time limit: ", self.time_limit)
+        #print("Time limit: ", self.time_limit)
+
+    def _reload_env(self):
+        if self.env:
+            self.env.close()
+            del self.env
+
+        #seed is changed to not repeat the same ENV_RELAOD_PERIOD episodes
+        self._env_args['seed'] = (self._env_args['seed'] + self.num_episode) % 1009
+        #worker id is changed to fix problem with linux sockets that wait for 60 seconds after closing
+        self._env_args['worker_id'] = self._worker_id_pair[0]
+        self._worker_id_pair = self._worker_id_pair[::-1]
+        print("Reloading Env#{}: episode: {}, active_threads={}".format(
+            self._env_args['worker_id'], self.num_episode, threading.active_count()
+        ))
+        # change UnityEnvHeadless to UnityEnvironment and remove headless arg
+        # if you want to return to the animalai version of environemt
+        env = UnityEnvHeadless(**self._env_args)
+        self.env = env
 
     def _make_obs_space(self):
         img_shape = (3,84,84) if self.channel_first else (84,84,3)
@@ -80,12 +108,14 @@ class AnimalAIWrapper(gym.Env):
         speed_obs = space.Box(-2.4, 2.4, shape=[3,], dtype=np.float32)
         angle = space.Box(-1., 1., shape=[1,], dtype=np.float32)
         pos = space.Box(-10., 10., shape=[3,], dtype=np.float32)
+        time = space.Box(0., 4., shape=[1,], dtype=np.float32)
 
         return space.Dict({
             "image":image_obs,
             "speed":speed_obs,
             'angle':angle,
-            'pos':pos
+            'pos':pos,
+            'time': time,
         })
 
     def _set_config(self, new_config):
@@ -113,7 +143,8 @@ class AnimalAIWrapper(gym.Env):
             "image":img,
             "speed":absolute_speed /10., #(-21.,21.)/10. --> (-2.1,2.1)
             "angle":self.angle/180 - 1., #(0., 360.)/180 -1. --> (-1.,1.)
-            "pos":self.pos/70. #(-700.,700.)/70. --> (-10.,10)
+            "pos":self.pos/70., #(-700.,700.)/70. --> (-10.,10)
+            "time": (self.time_limit - self.t)/250
         }
 
     def _make_info(self, obs, r, done):
@@ -127,6 +158,17 @@ class AnimalAIWrapper(gym.Env):
             return dict()
 
     def reset(self, forced_config=None):
+        self.num_episode += 1
+        if self.num_episode % self.ENV_RELOAD_PERIOD == 0:
+            self._reload_env()
+
+        self.t = 0
+        self.angle = np.zeros((1,), dtype=np.float32)
+        self.pos = np.zeros((3,), dtype=np.float32)
+
+        self.ep_reward = 0.
+        self.ep_success = False
+
         if forced_config:
             self._set_config(forced_config)
         else:
@@ -135,13 +177,6 @@ class AnimalAIWrapper(gym.Env):
         obs, r, done = self.process_state(self.env.reset(arenas_configurations=self.config))
         while done:
             obs, r, done = self.process_state(self.env.reset(arenas_configurations=self.config))
-
-        self.t = 0
-        self.angle = np.zeros((1,), dtype=np.float32)
-        self.pos = np.zeros((3,), dtype=np.float32)
-
-        self.ep_reward = 0.
-        self.ep_success = False
 
         return obs
 
@@ -205,6 +240,8 @@ def make_env_aai(env_path, config_generator, rank,
                 ).wrap_env(env)
             else:
                 raise NotImplementedError("Only '3d' or 'angles' types for GridOracle")
+
+            env = MetaObs().wrap_env(env)
 
         return env
 

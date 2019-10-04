@@ -1,5 +1,6 @@
 import numpy as np
 import glob
+import pathlib
 import os.path
 from animalai.envs.arena_config import ArenaConfig
 import logging
@@ -42,8 +43,7 @@ class ListSampler(ConfigGenerator):
     """
     @classmethod
     def create_from_dir(cls, config_dir):
-        pattern = os.path.join(config_dir, "*.yaml")
-        config_files = glob.glob(pattern)
+        config_files = [f for f in pathlib.Path(config_dir).glob("**/*.yaml")]
         configs = []
         config_names = []
         for cf in config_files:
@@ -97,3 +97,101 @@ class ListSampler(ConfigGenerator):
         name = self.config_names[self.next_id]
         self.next_id = (self.next_id + 1) % len(self.configs)
         return {'config':config, "config_name":name}
+
+
+class HierarchicalSampler(ConfigGenerator):
+
+    @classmethod
+    def create_from_dir(cls, config_dir):
+        import fnmatch
+        import os
+
+        n_configs = 0
+        root_dict = {}
+        for root, dirs, filenames in os.walk(config_dir):
+            path = os.path.relpath(root, config_dir)
+
+            curr_dict = root_dict
+            if path != '.':
+                for d in os.path.normpath(path).split(os.path.sep):
+                    curr_dict = curr_dict.setdefault(d, {})
+
+            for fn in fnmatch.filter(filenames, '*.yaml'):
+                filename = os.path.join(root, fn)
+                config = None
+                try:
+                    config = ArenaConfig(filename)
+
+                except Exception as e:
+                    logging.warning("{} can't load config from {}: {}".format(
+                        cls.__name__, filename, e.args
+                    ))
+
+                if config:
+                    n_configs += 1
+                    curr_dict[fn] = config
+
+        if n_configs == 0:
+            raise ValueError("There are no aai default_configs in {} directory".format(config_dir))
+
+        return cls(root_dict)
+
+    def __init__(self, names2configs): #, probs):
+        """
+        :param names2configs: a dictionary that recursively stores filaname -> ArenaConfig mapping
+        """
+        super(HierarchicalSampler, self).__init__()
+        self._configs = names2configs
+
+    def shuffle(self):
+        pass
+
+    def next_config(self, *args, **kwargs):
+        return self.recursive_choice(self._configs)
+
+    def recursive_choice(self, d, name=""):
+        key = np.random.choice(list(d.keys()))
+        choice = d[key]
+        name = os.path.join(name, key)
+        if isinstance(choice, dict):
+            return self.recursive_choice(choice, name=name)
+        else:
+            return {'config':choice, "config_name":name}
+
+class RandomizedGenerator(ConfigGenerator):
+
+    PERMUTABLE_OBJECTS=(
+        {"WallTransparent", "Wall"},
+        {"CardBox1", "CardBox2"},
+        {"CylinderTunnel", "CylinderTunnelTransparent"},
+        {"UObject", "LObject", "LObject2"}
+    )
+
+    PERMUTABLE_COLORS = (
+        {(153,153, 153), (-1., -1, -1), (0, 255, 0)},
+        {(255, 0, 255), (-1., -1, -1)}
+    )
+
+    def __init__(self, config_generator, object_change_prob=0.5, color_change_prob=0.5):
+        self.generator = config_generator
+        self.object_change_prob = object_change_prob
+        self.color_change_prob = color_change_prob
+        self._config = ArenaConfig() # we need this config in order to keep original configs intact
+
+    def shuffle(self):
+        self.generator.shuffle()
+
+    def next_config(self, *args, **kwargs):
+        conf_dict = self.generator.next_config(*args, **kwargs)
+        self._config.update(conf_dict['config'])
+
+    def _randomize_config(self, config):
+
+        for k, arena in self._config.arenas.items():
+            for item in arena.items:
+                if self.object_change_prob:
+                    for group in self.PERMUTABLE_OBJECTS:
+                        if item.name in group:
+                            item.name = np.random.choice(group)
+                            break
+

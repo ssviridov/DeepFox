@@ -356,7 +356,9 @@ class GridOracleWithAngles(Preprocessor):
         r = 0.
 
         if self._visited[angle, x, z] < self.revisit_threshold:
-            r += self.oracle_r  # reward for visiting new state
+            oracle_r = self.oracle_r
+            #oracle_r = self.oracle_r*(self.grid_size[0] - sum(self._visited[:, x, z] != 0.) / self.grid_size[0])
+            r += oracle_r  # reward for visiting new state
 
         if self.penalty_mode:  # (+oracle_r or 0.) becomes a (0. or -oracle_r)
             r -= self.oracle_r
@@ -364,3 +366,46 @@ class GridOracleWithAngles(Preprocessor):
         self.num_visited += (self._visited[angle, x, z] <= 0.)
         self._visited[angle, x, z] = 1.
         return r
+
+
+class MetaObs(Preprocessor):
+    """
+    Adds extra observations typically used in meta-learning settings
+    r_{t-1}, a_{t-1} in the observations dict under keys `r_prev`, `a_prev`.
+    """
+
+    def __init__(self,):
+        self.r_prev = None
+
+    def init(self, env):
+        assert isinstance(env.observation_space, spaces.Dict), "Works only with dict obs space!"
+        #update obs space with new observations:
+        space = dict(env.observation_space.spaces)
+        space['r_prev'] = spaces.Box(-6., 6., shape=(1,), dtype=np.float32)
+        space['a_prev'] = spaces.Box(0., 1., shape=(6,), dtype=np.float32)
+
+        obs_space = spaces.Dict(space)
+
+        return (obs_space,
+                env.action_space,
+                env.reward_range,
+                env.metadata)
+
+    def reset(self, obs):
+        self.r_prev = np.zeros((1,), dtype=np.float32)
+        obs['a_prev'] = np.zeros((6,), dtype=np.float32)
+        obs['r_prev'] = self.r_prev
+        return obs
+
+    def step(self,  act, obs, r, done, info):
+        obs['a_prev'] = self._get_action_repr(act)
+        obs['r_prev'] = self.r_prev.copy()
+        self.r_prev[0] = r
+        return obs, r, done, info
+
+    def _get_action_repr(self, action):
+        first_id, second_id = action//3, action % 3
+        action_repr = np.zeros((6,), dtype=np.float32)
+        action_repr[first_id] = 1.
+        action_repr[second_id+3] = 1.
+        return action_repr
