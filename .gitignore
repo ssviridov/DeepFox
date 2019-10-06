@@ -110,3 +110,5 @@ trained_models/
 .fuse_hidden*
 UnitySDK.log
 baselines/
+submission/data/
+test_submission/env/

@@ -1,4 +1,4 @@
-model_path: "/aaio/data/under-80M-steps.pt"
+model_path: "/aaio/data/under-200M-steps.pt"
 #if you are running run_submit_agent.py from pytorch-a2c-ppo
 # directory then use an appropriate path:
 #model_path: "submission/data/pretrained/ppo-visited-avg-pulling/best.pt"

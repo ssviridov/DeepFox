@@ -8,6 +8,7 @@ import torch as th
 from a2c_ppo_acktr.utils import init, conv_output_shape
 import torch.nn.functional as F
 
+
 class AAIPolicy(Policy):
     def __init__(self, obs_space, action_space, base=None, base_kwargs=None):
         super(Policy, self).__init__() #each we skip Policy's initialization!
@@ -420,14 +421,14 @@ class FixupBasicBlock(nn.Module):
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(FixupBasicBlock, self).__init__()
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
-        self.bias1a = nn.Parameter(torch.zeros(1))
+        self.bias1a = nn.Parameter(th.zeros(1))
         self.conv1 = conv3x3(inplanes, planes, stride)
-        self.bias1b = nn.Parameter(torch.zeros(1))
+        self.bias1b = nn.Parameter(th.zeros(1))
         self.relu = nn.ReLU(inplace=True)
-        self.bias2a = nn.Parameter(torch.zeros(1))
+        self.bias2a = nn.Parameter(th.zeros(1))
         self.conv2 = conv3x3(planes, planes)
-        self.scale = nn.Parameter(torch.ones(1))
-        self.bias2b = nn.Parameter(torch.zeros(1))
+        self.scale = nn.Parameter(th.ones(1))
+        self.bias2b = nn.Parameter(th.zeros(1))
         self.downsample = downsample
         self.stride = stride
 
@@ -451,13 +452,13 @@ class FixupBasicBlock(nn.Module):
 
 class FixupResNet(nn.Module):
 
-    def __init__(self, num_channels, image_dim, block = FixupBasicBlock, layers = [2, 2, 2, 2], , ):
+    def __init__(self, num_channels, image_dim, block=FixupBasicBlock, layers=[2, 2, 2, 2], downsample=None):
         super(FixupResNet, self).__init__()
         self.num_layers = sum(layers)
         self.inplanes = 64
         self.conv1 = nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3,
                                bias=False)
-        self.bias1 = nn.Parameter(torch.zeros(1))
+        self.bias1 = nn.Parameter(th.zeros(1))
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0])
@@ -465,7 +466,7 @@ class FixupResNet(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.bias2 = nn.Parameter(torch.zeros(1))
+        self.bias2 = nn.Parameter(th.zeros(1))
         self.fc = nn.Linear(512 * block.expansion, image_dim)
 
         for m in self.modules():
