@@ -112,6 +112,11 @@ def get_args():
         help='number of environment steps to train (default: 10e6)')
 
     parser.add_argument(
+        '--restart',
+        default=None,
+        help='Path to model checkpoint')
+
+    parser.add_argument(
         '-sd', '--save-dir',
         default='./trained_models/',
         help='Directory to save different experiments and common summaries (default: ./trained_models/)')

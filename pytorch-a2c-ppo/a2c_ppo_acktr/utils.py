@@ -6,6 +6,11 @@ import torch.nn as nn
 
 from a2c_ppo_acktr.envs import VecNormalize
 
+nonlinearities = {
+        "relu": nn.ReLU,
+        'leaky_relu': nn.LeakyReLU,
+        'tanh': nn.Tanh,
+    }
 
 # Get a render function
 def get_render_func(venv):
@@ -51,9 +56,20 @@ def update_linear_schedule(optimizer, epoch, total_num_epochs, initial_lr):
 
 
 def init(module, weight_init, bias_init, gain=1):
+    if isinstance(gain, str):
+        gain = nn.init.calculate_gain(gain)
+
     weight_init(module.weight.data, gain=gain)
     bias_init(module.bias.data)
     return module
+
+
+def default_init(module, gain=1):
+    return init(
+        module, nn.init.orthogonal_,
+        lambda x:nn.init.constant_(x, 0),
+        gain
+    )
 
 
 def cleanup_log_dir(log_dir):

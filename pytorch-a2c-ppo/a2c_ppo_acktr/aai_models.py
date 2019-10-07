@@ -5,32 +5,39 @@ from a2c_ppo_acktr.model import CNNBase, NNBase, Bernoulli,\
 import gym
 from torch import nn
 import torch as th
-from a2c_ppo_acktr.utils import init, conv_output_shape
+from a2c_ppo_acktr.utils import init, default_init, conv_output_shape
 import numpy as np
 from .aai_layers import NaiveHistoryAttention, TemporalAttentionPooling
 import torch.nn.functional as F
 
 class AAIPolicy(Policy):
-    def __init__(self, obs_space, action_space, base=None, base_kwargs=None):
+
+    def __init__(
+            self, obs_space,
+            action_space,
+            base=None,
+            base_kwargs=None,
+    ):
         super(Policy, self).__init__() #each we skip Policy's initialization!
         if base_kwargs is None:
             base_kwargs = {}
         if base is None:
             base = AAIBase
 
-        self.base = base(obs_space, **base_kwargs)
+        self.base = base(
+            obs_space,
+            **base_kwargs
+        )
 
-        if action_space.__class__.__name__ == "Discrete":
-            num_outputs = action_space.n
-            self.dist = Categorical(self.base.output_size, num_outputs)
-        elif action_space.__class__.__name__ == "Box":
-            num_outputs = action_space.shape[0]
-            self.dist = DiagGaussian(self.base.output_size, num_outputs)
-        elif action_space.__class__.__name__ == "MultiBinary":
-            num_outputs = action_space.shape[0]
-            self.dist = Bernoulli(self.base.output_size, num_outputs)
-        else:
-            raise NotImplementedError
+        # Kostrikov decided to merge state-encoder and critic-head inside
+        # one module(base) which he then wrapps with this module that defines
+        # actor-head separately. This is a questionable design choice imo.
+        # But I'm too lazy to change this
+        self.dist = Categorical(
+            self.base.output_size,
+            action_space.n,
+            **self.base.head_kwargs #comment above
+        )
 
 
 class AAIBase(NNBase):
@@ -43,7 +50,9 @@ class AAIBase(NNBase):
             hidden_size=512,
             extra_encoder_dim=256,
             image_encoder_dim=512,
+            head_kwargs=None
     ):
+        self.head_kwargs = head_kwargs
         self._image_encoder_dim = image_encoder_dim
         #if there is no extra_obs then we don't need an extra_encoder!
         self._extra_encoder_dim = extra_encoder_dim if extra_obs else 0
@@ -79,14 +88,11 @@ class AAIBase(NNBase):
             return {"image":obs_space.shape}
 
     def _create_critic(self):
-        init_ = lambda m:init(m, nn.init.orthogonal_, lambda x:nn.init.constant_(x, 0))
-        return init_(nn.Linear(self._hidden_size, 1))
+        return default_init(nn.Linear(self._hidden_size, 1), 'linear')
 
     def _create_image_encoder(self):
         num_channels = self.obs_shapes['image'][0]
-        init_ = lambda m:init(m, nn.init.orthogonal_, lambda x:nn.init.
-                              constant_(x, 0), nn.init.calculate_gain('relu'))
-
+        init_ = lambda x: default_init(x,'relu')
         return nn.Sequential(
             init_(nn.Conv2d(num_channels, 32, 8, stride=4)), nn.ReLU(),
             init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
@@ -96,16 +102,15 @@ class AAIBase(NNBase):
 
     def _create_extra_encoder(self):
         if self._extra_obs:
-            n_features = 0
+            in_features = 0
             for k in self._extra_obs:
                 k_shape = self.obs_shapes[k]
                 assert len(k_shape) == 1, 'We account only for one dimensional extra obs'
-                n_features += k_shape[0]
+                in_features += k_shape[0]
 
-            init_ = lambda m:init(m, nn.init.orthogonal_, lambda x:nn.init.
-                                  constant_(x, 0), nn.init.calculate_gain('relu'))
+            out_features = self._extra_encoder_dim
             return nn.Sequential(
-                init_(nn.Linear(n_features, self._extra_encoder_dim)),
+                default_init(nn.Linear(in_features, out_features), 'relu'),
                 nn.ReLU()
             )
         else:
@@ -137,7 +142,9 @@ class ImageVecMapBase(NNBase):
             hidden_size=512,
             extra_encoder_dim=512,
             image_encoder_dim=512,
+            head_kwargs=None,
     ):
+
         self._image_encoder_dim = image_encoder_dim
         # if there is no extra_obs then we don't need an extra_encoder!
         self._extra_encoder_dim = extra_encoder_dim if extra_obs else 0
@@ -146,6 +153,7 @@ class ImageVecMapBase(NNBase):
         self._hidden_size = hidden_size if policy!='ff' else self._total_encoder_dim
         self._extra_obs = extra_obs
         self._policy_type = policy
+        self.head_kwargs = head_kwargs if head_kwargs else {}
 
         super(ImageVecMapBase, self).__init__(
             policy=='rnn',
@@ -172,13 +180,15 @@ class ImageVecMapBase(NNBase):
             return {"image": obs_space.shape}
 
     def _create_critic(self):
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0))
-        self.critic_linear = init_(nn.Linear(self._hidden_size, 1))
+        hs = self.head_kwargs.get('hidden_sizes',tuple())
+        nl = self.head_kwargs.get('nl', 'relu')
+        raise NotImplementedError
+
+        self.critic_linear = default_init(nn.Linear(self._hidden_size, 1))
 
     def _create_image_encoder(self):
         num_channels = self.obs_shapes['image'][-3]
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), nn.init.calculate_gain('relu'))
+        init_ = lambda m: default_init(m, 'relu')
 
         self.image_encoder = nn.Sequential(
             init_(nn.Conv2d(num_channels, 32, 8, stride=4)), nn.ReLU(),
@@ -189,20 +199,22 @@ class ImageVecMapBase(NNBase):
 
     def _create_map_encoder(self):
         num_channels, H, W = self.obs_shapes['visited'][-3:]
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), nn.init.calculate_gain('relu'))
+        init_ = lambda m: default_init(m, 'relu')
 
         self.map_encoder = nn.Sequential(
             init_(nn.Conv2d(num_channels, 16, 4, 2)), nn.ReLU(),
-            init_(nn.Conv2d(16, 32, 3, 1)), nn.MaxPool2d(2, stride=2), nn.ReLU(),
+            init_(nn.Conv2d(16, 32, 3, 1)),
+            nn.MaxPool2d(2, stride=2),
+            nn.ReLU(),
             Flatten()
         )
 
     def _create_extra_encoder(self):
-        input_features = 0
+        out_features = self._extra_encoder_dim
+        in_features = 0
         if 'visited' in self._extra_obs:
             self._create_map_encoder()
-            input_features += conv_output_shape(
+            in_features += conv_output_shape(
                 self.obs_shapes['visited'][-3:],
                 self.map_encoder
             )[0]
@@ -212,13 +224,14 @@ class ImageVecMapBase(NNBase):
         # vectors would have 2(if stacked along time) or 1
         self._vector_obs = [k for k in self._extra_obs if len(self.obs_shapes[k]) < 3]
         for k in self._vector_obs:
-            input_features += self.obs_shapes[k][-1]
+            in_features += self.obs_shapes[k][-1]
 
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), nn.init.calculate_gain('relu'))
 
         self.extra_linear = nn.Sequential(
-            init_(nn.Linear(input_features, self._extra_encoder_dim)),
+            default_init(
+                nn.Linear(in_features, out_features),
+                'relu'
+            ),
             nn.ReLU()
         )
 
@@ -484,6 +497,7 @@ class AttentionIVM(ImageVecMapBase):
         x = self.attention_layer(x)
 
         return self.critic_linear(x), x, rnn_hxs
+
 
 
 import torchvision

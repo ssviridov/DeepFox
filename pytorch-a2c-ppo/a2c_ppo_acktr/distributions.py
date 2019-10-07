@@ -1,10 +1,11 @@
 import math
+from collections import OrderedDict
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from a2c_ppo_acktr.utils import AddBias, init
+from a2c_ppo_acktr.utils import AddBias, init, default_init, nonlinearities
 
 """
 Modify standard PyTorch distributions so they are compatible with this code.
@@ -50,26 +51,30 @@ bernoulli_entropy = FixedBernoulli.entropy
 FixedBernoulli.entropy = lambda self: bernoulli_entropy(self).sum(-1)
 FixedBernoulli.mode = lambda self: torch.gt(self.probs, 0.5).float()
 
-
 class Categorical(nn.Module):
-    def __init__(self, num_inputs, num_outputs, two_layers=False):
+
+    def __init__(self, num_inputs, num_outputs, hidden_sizes=tuple(), nl=nn.Tanh):
         super(Categorical, self).__init__()
+        self._build_network(num_inputs, num_outputs, hidden_sizes, nl)
 
-        init_ = lambda m, gain: init(
-            m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            gain=gain)
+    def _build_network(self, num_inputs, num_outputs, hidden_sizes, nl):
+        nl_module = nonlinearities[nl]
 
-        if two_layers:
-            tanh_gain = nn.init.calculate_gain('tanh')
-            self.policy_head = nn.Sequential(
-                init_(nn.Linear(num_inputs, num_inputs), tanh_gain),
-                nn.Tanh(),
-                init_(nn.Linear(num_inputs, num_outputs), 1)
-            )
+        layers = []
+        prev_dim = num_inputs
+        for i, h in enumerate(hidden_sizes):
+            #fc_name = 'policy_fc{}'.format(i + 1)
+            #nl_name = 'policy_{}_{}'.format(nl, i+1)
+            layers.append( default_init(nn.Linear(prev_dim, h), nl) )
+            layers.append( nl_module() )
+            prev_dim = h
+
+        #fc_name = 'policy_fc{}'.format(len(hidden_sizes)+1)
+        layers.append(default_init(nn.Linear(prev_dim, num_outputs), 0.01))
+        if len(layers)>1:
+            self.policy_head = nn.Sequential(*layers)
         else:
-            self.policy_head = init_(nn.Linear(num_inputs, num_outputs),0.01)
+            self.policy_head = layers[0]
 
     def forward(self, x):
         x = self.policy_head(x)

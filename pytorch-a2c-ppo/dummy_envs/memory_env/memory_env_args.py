@@ -5,6 +5,12 @@ import torch
 
 def get_args():
     parser = argparse.ArgumentParser(description='RL')
+
+    parser.add_argument(
+        '--restart',
+        default=None,
+        help='Path to model checkpoint')
+
     #AAI specific arguments:
     parser.add_argument(
         '-fs', '--frame-stack', type=int, default=1,
