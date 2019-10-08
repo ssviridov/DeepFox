@@ -158,7 +158,8 @@ def main():
         headless=args.headless,
         grid_oracle_kwargs=args.real_oracle_args,
         image_only=len(args.extra_obs) == 0,
-        docker_training=args.docker_training
+        docker_training=args.docker_training,
+        reduced_actions=args.reduced_actions
     )
 
     #Create Agent:
