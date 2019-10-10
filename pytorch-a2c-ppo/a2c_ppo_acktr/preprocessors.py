@@ -295,8 +295,8 @@ class GridOracleWithAngles(Preprocessor):
         self._visited[:] = 0
         self.num_visited = 0
 
-        coords = self._cell_coords(obs['pos'], obs['angle'])
-        expl_r = self._visit(*coords)
+        #coords = self._cell_coords(obs['pos'], obs['angle'])
+        #expl_r = self._visit(*coords)
 
         return self._observation(obs)
 
