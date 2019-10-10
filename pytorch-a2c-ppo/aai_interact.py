@@ -5,12 +5,17 @@ from gym.envs.classic_control.rendering import SimpleImageViewer
 import numpy as np
 import pyglet.window
 from a2c_ppo_acktr.aai_wrapper import make_env_aai
-from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator
+from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator, ListSampler, FixedTimeGenerator
 import cv2
 
 aai_path = "aai_resources/env/AnimalAI"
-aai_config_dir = "aai_resources/new_configs/" #"aai_resources/test_configs/"
-curr_config = aai_config_dir + "mazes/5_walls/5_walls_gold.yaml" #"exampleConfig.yaml"
+config_path = "aai_resources/new_configs/" #"aai_resources/test_configs/"
+config_path = config_path + "mazes" #/5_walls/5_walls_gold.yaml"
+
+
+def get_config_name(env_aai):
+    name = env_aai.unwrapped.config_name[:-5]
+    return name
 
 
 class EnvInteractor(SimpleImageViewer):
@@ -111,15 +116,23 @@ class EnvInteractor(SimpleImageViewer):
 
 
 def main():
-    rank = np.random.randint(0, 1000)
+    if config_path.endswith("yaml"):
+        gen_config = SingleConfigGenerator.from_file(config_path)
+        num_episodes = 1
+    else:
+        gen_config = ListSampler.create_from_dir(config_path)
+        num_episodes = len(gen_config.configs)
+    gen_config = FixedTimeGenerator(gen_config, 1500)
+
+    rank = np.random.randint(0, 800)
     viewer = EnvInteractor()
-    gen_config = SingleConfigGenerator.from_file(curr_config)
-    gen_config.config.arenas[0].t = 5000
+
+
     make = make_env_aai(
         aai_path, gen_config, rank, False,
         grid_oracle_kwargs=dict(
             oracle_type="angles",
-            trace_decay=1.,# 0.9999,
+            trace_decay=0.999,# 0.9999,
             num_angles=3,
             cell_side=2,
         ),
@@ -127,18 +140,19 @@ def main():
         image_only=False
     )
     env = make()
-    #env = AnimalAIWrapper(
-    #    aai_path, rank, gen_config, channel_first=False, image_only=False,
-    #)
-    run_episode(env, viewer)
+    for ep in range(num_episodes):
+        run_episode(ep, env, viewer)
+        # episodes are reset automatically
 
 
-def run_episode(env, viewer):
+def run_episode(ep, env, viewer):
     #seed = select_seed()
     #env.seed(seed)
     seed = 17
     obs = env.reset()
-    record_episode(seed, env, viewer, obs)
+    config_name = get_config_name(env)
+    print("#### Episode #{}: {} ##### ".format(ep, config_name))
+    record_episode(seed, env, viewer)
 
 
 def rotate(vec, angle):
@@ -154,15 +168,18 @@ def concat_images(image, map_view):
     map_view = cv2.resize(map_view, (84, 84))
     return np.concatenate((image, map_view), axis=1)
 
+
 def angle360(obs):
     return (obs['angle'][0]+1.)*180.
+
 
 def color_filter(image, color):
     has_color = np.logical_and.reduce(image==np.asarray(color), 2)*255
     has_color = np.stack([has_color]*3, 2)
     return np.concatenate([image, has_color], axis=1)
 
-def record_episode(seed, env, viewer, obs):
+
+def record_episode(seed, env, viewer):
 
     action_log = []
     reward_log = []

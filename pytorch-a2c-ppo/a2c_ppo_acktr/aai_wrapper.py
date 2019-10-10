@@ -32,7 +32,7 @@ def rotate(vec, angle):
 
 class AnimalAIWrapper(gym.Env):
 
-    ENV_RELOAD_PERIOD = 1200 #total update period( with num_processes==16) will be in range [2M, 6M] steps
+    ENV_RELOAD_PERIOD = 2400 #total update period( with num_processes==16) will be in range [2M, 6M] steps
 
     def __init__(self, env_path, rank, config_generator,
                  action_repeat=1, docker_training=False,
@@ -158,6 +158,7 @@ class AnimalAIWrapper(gym.Env):
             return dict()
 
     def reset(self, forced_config=None):
+        #print('ENV{}.reset(): starting new episode!'.format(self.env.port-5005))
         self.num_episode += 1
         if self.num_episode % self.ENV_RELOAD_PERIOD == 0:
             self._reload_env()
@@ -203,8 +204,9 @@ class AnimalAIWrapper(gym.Env):
         self.ep_reward += r
         info = self._make_info(obs, r, done)
 
-        if done:
-            obs = self.reset()
+        #if done:
+            #print('ENV{}.step(): episode is done!'.format(self.env.port-5005))
+            #obs = self.reset()
 
         return obs, r, done, info
 
@@ -256,7 +258,7 @@ def make_vec_envs_aai(
                          headless, grid_oracle_kwargs, **env_kwargs)
             for i in range(num_processes)]
 
-    if len(envs) > 2:
+    if len(envs) > 0:
         make_test = make_env_aai(env_path, config_generator,
                                  seed+num_processes+1, headless,
                                  grid_oracle_kwargs,**env_kwargs)

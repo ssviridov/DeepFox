@@ -59,7 +59,7 @@ class ListSampler(ConfigGenerator):
 
             if config:
                 configs.append(config)
-                config_names.append(os.path.basename(cf))
+                config_names.append(os.path.relpath(cf, config_dir))
 
 
         if len(configs) == 0:
@@ -158,7 +158,52 @@ class HierarchicalSampler(ConfigGenerator):
         else:
             return {'config':choice, "config_name":name}
 
+
+class ConfigGeneratorWrapper(ConfigGenerator):
+    """
+    For classes that modify already generated configs.
+    For example: change time, add objects, etc.
+    """
+    def __init__(self, config_generator):
+        self.generator = config_generator
+
+    def shuffle(self):
+        self.generator.shuffle()
+
+    def next_config(self, *args, **kwargs):
+        config_dict = self.generator.next_config(*args, **kwargs)
+        return self.process_config(config_dict)
+
+    def process_config(self, config_dict):
+        raise NotImplementedError
+
+
+class FixedTimeGenerator(ConfigGeneratorWrapper):
+    """
+    All configs will have the same time limit.
+    I use it in aai_interact.py
+    """
+    def __init__(self, config_generator, time):
+        super(FixedTimeGenerator, self).__init__(config_generator)
+        self.time = time
+        self._config = ArenaConfig()
+
+    def process_config(self, config_dict):
+        self._config.update(config_dict['config'])
+        self._config.arenas[0].t = self.time
+        config_dict['config'] = self._config
+
+        return config_dict
+
+
 class RandomizedGenerator(ConfigGenerator):
+    """
+    A generator that randomizes objects properties:
+    changes color, sets blackouts, replaces an object with similar one.
+
+    !NOT DONE YET!
+
+    """
 
     PERMUTABLE_OBJECTS=(
         {"WallTransparent", "Wall"},

@@ -268,6 +268,7 @@ def main():
                 obs, reward, done, infos = envs.step(action)
                 for info in infos:
                     if 'episode_reward' in info.keys():
+                        #print('TRAIN: EPISODE IS DONE!')
                         episode_rewards.append(info['episode_reward'])
                         episode_success.append(info['episode_success'])
                         episode_len.append(info['episode_len'])
