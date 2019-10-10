@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from a2c_ppo_acktr.utils import AddBias, init, default_init, nonlinearities
+from a2c_ppo_acktr.utils import AddBias, init, default_init, nonlinearities, mlp_body
 
 """
 Modify standard PyTorch distributions so they are compatible with this code.
@@ -58,23 +58,15 @@ class Categorical(nn.Module):
         self._build_network(num_inputs, num_outputs, hidden_sizes, nl)
 
     def _build_network(self, num_inputs, num_outputs, hidden_sizes, nl):
-        nl_module = nonlinearities[nl]
 
-        layers = []
-        prev_dim = num_inputs
-        for i, h in enumerate(hidden_sizes):
-            #fc_name = 'policy_fc{}'.format(i + 1)
-            #nl_name = 'policy_{}_{}'.format(nl, i+1)
-            layers.append( default_init(nn.Linear(prev_dim, h), nl) )
-            layers.append( nl_module() )
-            prev_dim = h
-
-        #fc_name = 'policy_fc{}'.format(len(hidden_sizes)+1)
-        layers.append(default_init(nn.Linear(prev_dim, num_outputs), 0.01))
-        if len(layers)>1:
-            self.policy_head = nn.Sequential(*layers)
+        if hidden_sizes>0:
+            policy_head = mlp_body(num_inputs, hidden_sizes, nl)
+            layer_final = default_init(nn.Linear(hidden_sizes[-1], num_outputs), 0.01)
+            policy_head.add_module(str(len(policy_head)), layer_final)
         else:
-            self.policy_head = layers[0]
+            policy_head = default_init(nn.Linear(num_inputs, num_outputs), 0.01)
+
+        self.policy_head = policy_head
 
     def forward(self, x):
         x = self.policy_head(x)

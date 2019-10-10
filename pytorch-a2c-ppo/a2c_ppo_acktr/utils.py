@@ -71,6 +71,22 @@ def default_init(module, gain=1):
         gain
     )
 
+def mlp_body(num_inputs, hidden_sizes, nl='relu', layer_init=None):
+    if layer_init is None:
+        layer_init=lambda m: default_init(m, nl)
+
+    nl_module = nonlinearities[nl]
+
+    layers = []
+    prev_dim = num_inputs
+    for i, h in enumerate(hidden_sizes):
+        layers.append( layer_init(nn.Linear(prev_dim, h)))
+        layers.append( nl_module() )
+        prev_dim = h
+
+    model = nn.Sequential(*layers)
+    return model
+
 
 def cleanup_log_dir(log_dir):
     try:
