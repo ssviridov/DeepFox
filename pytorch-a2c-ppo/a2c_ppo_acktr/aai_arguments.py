@@ -19,6 +19,12 @@ def get_args():
         help='Training in docker')
 
     parser.add_argument(
+        '--scale-reward',
+        action='store_true',
+        default=False,
+        help='Training in docker')
+
+    parser.add_argument(
         '--restart',
         default=None,
         help='Path to model checkpoint')

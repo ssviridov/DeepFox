@@ -37,7 +37,7 @@ class AnimalAIWrapper(gym.Env):
     def __init__(self, env_path, rank, config_generator,
                  action_repeat=1, docker_training=False,
                  headless=False, image_only=True, channel_first=True,
-                 reduced_actions=False):
+                 reduced_actions=False, scale_reward=False):
 
         super(AnimalAIWrapper, self).__init__()
         #if config_generator is None we use random config!
@@ -75,6 +75,8 @@ class AnimalAIWrapper(gym.Env):
         self.observation_space = self._make_obs_space()
         self.action_space = Discrete(len(lookup))
         self.action_repeat = action_repeat
+
+        self.scale_reward = scale_reward
 
         self.pos = np.zeros((3,), dtype=np.float32)
         self.angle = np.zeros((1,), dtype=np.float32)
@@ -169,6 +171,8 @@ class AnimalAIWrapper(gym.Env):
 
         self.ep_reward = 0.
         self.ep_success = False
+        if self.scale_reward:
+            self.scaled_ep_reward = 0.
 
         if forced_config:
             self._set_config(forced_config)
@@ -203,6 +207,12 @@ class AnimalAIWrapper(gym.Env):
 
         self.ep_reward += r
         info = self._make_info(obs, r, done)
+
+        if self.scale_reward:
+            r = 0.3 * min(np.tanh(r), 0) + 5.0 * max(np.tanh(r), 0)
+            self.scaled_ep_reward += r
+            info["episode_scaled_reward"] = float(self.scaled_ep_reward)
+
 
         #if done:
             #print('ENV{}.step(): episode is done!'.format(self.env.port-5005))
