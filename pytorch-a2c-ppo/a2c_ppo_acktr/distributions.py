@@ -53,13 +53,13 @@ FixedBernoulli.mode = lambda self: torch.gt(self.probs, 0.5).float()
 
 class Categorical(nn.Module):
 
-    def __init__(self, num_inputs, num_outputs, hidden_sizes=tuple(), nl=nn.Tanh):
+    def __init__(self, num_inputs, num_outputs, hidden_sizes=tuple(), nl='relu'):
         super(Categorical, self).__init__()
         self._build_network(num_inputs, num_outputs, hidden_sizes, nl)
 
     def _build_network(self, num_inputs, num_outputs, hidden_sizes, nl):
 
-        if hidden_sizes>0:
+        if hidden_sizes:
             policy_head = mlp_body(num_inputs, hidden_sizes, nl)
             layer_final = default_init(nn.Linear(hidden_sizes[-1], num_outputs), 0.01)
             policy_head.add_module(str(len(policy_head)), layer_final)

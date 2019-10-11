@@ -184,9 +184,13 @@ def get_args():
         help='compute returns taking into account time limits')
     parser.add_argument(
         '-pol','--policy',
-        choices=('rnn', 'ff', 'mha', 'tc'),
+        choices=('rnn', 'ff', 'cached_mha', 'cached_tc'),
         default="ff",
-        help='Choose policy: feedforward, recurrent, or based on multihead attention!'
+        help='Choose policy: feedforward, recurrent, or a policy with temporal attention (default: ff)'
+    )
+    parser.add_argument(
+        '-ml', '--memory-len', type=int, default=20,
+        help='Determines the size of memory window for an attention based policy (default: 20)'
     )
     parser.add_argument(
         '--use-linear-lr-decay',
@@ -205,6 +209,9 @@ def get_args():
         for k, v in config.items():
             d[k] = v
 
+    if not args.policy.startswith('cached'):
+        args.memory_len = 1
+
     if not getattr(args, 'experiment_tag', None):
         date = datetime.datetime.now()
         args.experiment_tag = "{0.year}-{0.month}-{0.day}-{0.hour}-{0.minute}".format(date)
@@ -212,7 +219,7 @@ def get_args():
     args.summary_dir = ospath.join(args.save_dir, "summaries", args.experiment_tag)
 
     assert args.algo in ['a2c', 'ppo', 'acktr']
-    if args.recurrent_policy:
+    if args.policy != 'ff':
         assert args.algo in ['a2c', 'ppo'], \
             'Recurrent policy is not implemented for ACKTR'
 

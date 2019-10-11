@@ -274,11 +274,13 @@ def make_vec_envs_aai(
     envs = VecPyTorch(envs, device)
 
     if num_frame_stack is not None:
-        envs = VecHistoryFrameStack(envs, num_frame_stack, device)
-        #if isinstance(envs.observation_space, gym.spaces.Box):
-        #    envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
-        #else:
-        #    envs = VecPyTorchFrameStackDictObs(envs, num_frame_stack, device)
+        #VecHistoryFrameStack - stacks all observations in dict along a new dimention
+        #envs = VecHistoryFrameStack(envs, num_frame_stack, device)
+
+        if isinstance(envs.observation_space, gym.spaces.Box):
+            envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
+        else:
+            envs = VecPyTorchFrameStackDictObs(envs, num_frame_stack, device)
 
     #obs = envs.reset()
     return envs

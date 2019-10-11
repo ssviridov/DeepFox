@@ -180,6 +180,8 @@ class MLPWithAttention(DummyMLP):
 
         return self.critic_linear(x), x, rnn_hxs
 
+
+
 class MLPWithCachedAttention(DummyMLP):
 
     def __init__(

@@ -9,7 +9,7 @@ import torch
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.aai_arguments import get_args
 from a2c_ppo_acktr.aai_wrapper import make_vec_envs_aai
-from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMapBase, ImageVecMap2, ImageVecMap3, AttentionIVM
+from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMap
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
@@ -73,6 +73,7 @@ class DummySaver(object):
         print('Train arguments saved in {}'.format(file_path))
         return status
 
+
 def log_progress(summary,
         curr_update, curr_step, ep_rewards, ep_success, ep_len,
         ep_visited, dist_entropy, value_loss, action_loss,
@@ -118,6 +119,26 @@ def args_to_str(args):
     return newline.join(lines)
 
 
+def make_model_kwargs(args):
+    body_kwargs = dict()
+
+    if args.policy == 'rnn':
+        body_kwargs['hidden_size']=512
+
+    elif args.policy.startswith('cached'):
+        body_kwargs['memory_len']= getattr(args, 'memory_len', 20)
+        body_kwargs['attention_heads'] = getattr(args, 'attention_heads', 3) #ignored with cached_tc
+
+    model_kwargs = dict(
+        body_type=args.policy,
+        extra_obs=args.extra_obs,
+        head_kwargs=dict(hidden_sizes=(512,)),  # defaults: (hidden_sizes=tuple(), nl='relu')
+        body_kwargs=body_kwargs,
+        map_dim=384,  # 'extra_encoder_dim':384,
+        image_dim=384,
+    )
+    return model_kwargs
+
 def main():
     args = get_args()
     if args.seed is None:
@@ -140,8 +161,6 @@ def main():
     gen_config = HierarchicalSampler.create_from_dir(args.config_dir)
     #gen_config = SingleConfigGenerator.from_file(
     #    "aai_resources/new_configs/mazes/chess_walls.yaml")
-        #"aai_resources/test_configs/MySample2.yaml"
-    #    "aai_resources/default_configs/1-Food.yaml"
 
     args.real_oracle_args = dict(
         oracle_type="angles",
@@ -162,15 +181,8 @@ def main():
 
     #Create Agent:
     if not args.restart:
-        args.base_network_args = {
-            'recurrent': args.recurrent_policy,
-            'extra_obs': args.extra_obs,
-            'hidden_size': 512,
-            'map_dim': 384,  # 'extra_encoder_dim':384,
-            'image_dim': 512,
-            #    'freeze_resnet':True,
-        }
-        network_class = ImageVecMap3
+        args.base_network_args = make_model_kwargs(args)
+        network_class = ImageVecMap
         args.network_cls = network_class.__name__
 
         actor_critic = AAIPolicy(
@@ -225,7 +237,7 @@ def main():
     rollouts = create_storage(
         args.num_steps, args.num_processes,
         envs.observation_space, envs.action_space,
-        actor_critic.recurrent_hidden_state_size
+        actor_critic.internal_state_shape
     )
 
     obs = envs.reset()
