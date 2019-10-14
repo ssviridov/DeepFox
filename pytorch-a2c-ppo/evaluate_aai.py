@@ -19,7 +19,7 @@ def evaluate(actor_critic, env_path, gen_config, seed, num_processes,
 
     obs = envs.reset()
     eval_recurrent_hidden_states = torch.zeros(
-        num_processes, actor_critic.recurrent_hidden_state_size, device=device)
+        num_processes, actor_critic.internal_state_shape, device=device)
     eval_masks = torch.zeros(num_processes, 1, device=device)
 
     while len(eval_episode_rewards) < 10:

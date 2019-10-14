@@ -281,7 +281,7 @@ class Agent(object):
 
         self.rnn_state = th.zeros(
             batch_size,
-            self.model.recurrent_hidden_state_size,
+            self.model.internal_state_shape,
             device=self.device
         )
         self.masks = th.zeros(batch_size,1, device=self.device)

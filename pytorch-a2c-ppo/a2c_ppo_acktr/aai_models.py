@@ -2,281 +2,259 @@ from collections import OrderedDict
 
 from a2c_ppo_acktr.model import CNNBase, NNBase, Bernoulli,\
     Categorical, DiagGaussian, MLPBase, Flatten, Policy
+from .utils import mlp_body
 import gym
 from torch import nn
 import torch as th
-from a2c_ppo_acktr.utils import init, conv_output_shape
+from a2c_ppo_acktr.utils import init, default_init, conv_output_shape
+import numpy as np
+from .aai_layers import NaiveHistoryAttention, TemporalAttentionPooling, CachedAttention
 import torch.nn.functional as F
+import logging
+
 
 class AAIPolicy(Policy):
-    def __init__(self, obs_space, action_space, base=None, base_kwargs=None):
+
+    def __init__(
+            self, obs_space,
+            action_space,
+            base=None,
+            base_kwargs=None,
+    ):
         super(Policy, self).__init__() #each we skip Policy's initialization!
         if base_kwargs is None:
             base_kwargs = {}
         if base is None:
-            base = AAIBase
+            base = ImageVecMap
 
-        self.base = base(obs_space, **base_kwargs)
-
-        if action_space.__class__.__name__ == "Discrete":
-            num_outputs = action_space.n
-            self.dist = Categorical(self.base.output_size, num_outputs)
-        elif action_space.__class__.__name__ == "Box":
-            num_outputs = action_space.shape[0]
-            self.dist = DiagGaussian(self.base.output_size, num_outputs)
-        elif action_space.__class__.__name__ == "MultiBinary":
-            num_outputs = action_space.shape[0]
-            self.dist = Bernoulli(self.base.output_size, num_outputs)
-        else:
-            raise NotImplementedError
-
-
-class AAIBase(NNBase):
-
-    def __init__(
-            self,
+        self.base = base(
             obs_space,
-            extra_obs=None,
-            recurrent=False,
-            hidden_size=512,
-            extra_encoder_dim=256,
-            image_encoder_dim=512,
-    ):
-        self._image_encoder_dim = image_encoder_dim
-        #if there is no extra_obs then we don't need an extra_encoder!
-        self._extra_encoder_dim = extra_encoder_dim if extra_obs else 0
-        self._total_encoder_dim = self._image_encoder_dim + self._extra_encoder_dim
-        #if recurrent is False there will be no layer after encoders ouputs:
-        self._hidden_size = hidden_size if recurrent else self._total_encoder_dim
-        self._extra_obs = extra_obs
-
-        super(AAIBase, self).__init__(
-            recurrent,
-            self._image_encoder_dim+self._extra_encoder_dim,
-            self._hidden_size
+            **base_kwargs
         )
 
-        self.obs_shapes = self._get_obs_shapes(obs_space)
-        self._image_only_obs = isinstance(obs_space, gym.spaces.Box)
-
-        self.image_encoder = self._create_image_encoder()
-
-        if self._extra_obs:
-            self.extra_encoder = self._create_extra_encoder()
-        else:
-            self.extra_encoder = None
-
-        self.critic_linear = self._create_critic()
-
-        self.train()
-
-    def _get_obs_shapes(self, obs_space):
-        if isinstance(obs_space, gym.spaces.Dict):
-            return {k:v.shape for k,v in obs_space.spaces.items()}
-        else:
-            return {"image":obs_space.shape}
-
-    def _create_critic(self):
-        init_ = lambda m:init(m, nn.init.orthogonal_, lambda x:nn.init.constant_(x, 0))
-        return init_(nn.Linear(self._hidden_size, 1))
-
-    def _create_image_encoder(self):
-        num_channels = self.obs_shapes['image'][0]
-        init_ = lambda m:init(m, nn.init.orthogonal_, lambda x:nn.init.
-                              constant_(x, 0), nn.init.calculate_gain('relu'))
-
-        return nn.Sequential(
-            init_(nn.Conv2d(num_channels, 32, 8, stride=4)), nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)), nn.ReLU(), Flatten(),
-            init_(nn.Linear(32 * 7 * 7, self._image_encoder_dim)), nn.ReLU()
+        # Kostrikov decided to merge state-encoder and critic-head inside
+        # one module(base) which he then wrapps with this module that defines
+        # actor-head separately. This is a questionable design choice imo.
+        # But I'm too lazy to change this
+        self.dist = Categorical(
+            self.base.output_size,
+            action_space.n,
+            **self.base.head_kwargs #comment above
         )
 
-    def _create_extra_encoder(self):
-        if self._extra_obs:
-            n_features = 0
-            for k in self._extra_obs:
-                k_shape = self.obs_shapes[k]
-                assert len(k_shape) == 1, 'We account only for one dimensional extra obs'
-                n_features += k_shape[0]
 
-            init_ = lambda m:init(m, nn.init.orthogonal_, lambda x:nn.init.
-                                  constant_(x, 0), nn.init.calculate_gain('relu'))
-            return nn.Sequential(
-                init_(nn.Linear(n_features, self._extra_encoder_dim)),
-                nn.ReLU()
+class AAIBody(nn.Module):
+    def __init__(self, body_type, input_size, **kwargs):
+
+        super(AAIBody, self).__init__()
+        self._body_type = body_type
+
+        # these will be initialized in the _init_{something} functions:
+        self._sequential = None  # bool
+        self._hidden_size = None  # int
+        self._internal_state_shape = None  # tuple of ints
+        self._body_forward = None  # a method that processes input from encoders and returns a final
+        # embedding for policy and value heads
+
+        if self._body_type == 'rnn':
+            self._init_rnn(input_size, kwargs)
+
+        elif self._body_type.startswith("cached"):
+            self._init_attn(input_size, kwargs)
+
+        elif self._body_type == 'ff':
+            #ok here is a question:
+            #if policy is feedforward should we add one more feedforward layer?
+            # or just ignore it an attach output from various encoders directly to policy and value heads?
+            #(like Kostrikov did in his code)
+            self._init_none(input_size, kwargs)
+
+        else:
+            raise NotImplementedError("recurrency type {} is unknown!".format(self._body_type))
+
+        self._check_init(kwargs)
+
+    def _init_rnn(self, input_size, kwargs):
+
+        self._sequential = True
+        self._hidden_size = kwargs.pop('hidden_size', input_size)
+
+        self.gru = nn.GRU(input_size, self._hidden_size)
+
+        for name, param in self.gru.named_parameters():
+            if 'bias' in name:
+                nn.init.constant_(param, 0)
+            elif 'weight' in name:
+                nn.init.orthogonal_(param)
+
+        self._internal_state_shape = (self._hidden_size,)
+        self._body_forward = self._forward_gru
+
+    def _init_attn(self, input_size, kwargs):
+
+        self._sequential = True
+        self._hidden_size = 2 * kwargs.pop('hidden_size', input_size)
+
+        if self._body_type.endswith('tc'):
+            attn = TemporalAttentionPooling(input_size)
+
+        elif self._body_type.endswith('mha'):
+            attn_heads = kwargs.pop('attention_heads', 3)
+            attn = NaiveHistoryAttention(input_size, attn_heads)
+
+        else:
+            raise NotImplementedError("{}? What is that?".format(self._body_type))
+
+        self._memory_len = kwargs.pop('memory_len', 10)
+        self.attention_layer = CachedAttention(attn, self._memory_len)
+
+        self._internal_state_shape = (self._memory_len, input_size)
+        self._body_forward = self._forward_attn
+
+    def _init_none(self, input_size, kwargs):
+        self._sequential = False
+        self._internal_state_shape = (1,)
+        self._hidden_size = input_size
+        self._body_forward = self._forward_identity
+
+    def _check_init(self, kwargs):
+        # check that all fields are initialized!
+        for field in ('_sequential', '_hidden_size', '_internal_state_shape', '_body_forward'):
+            assert getattr(self, field) is not None, "self.{} is not initialized!".format(field)
+
+            # check for unused parameters:
+        if kwargs:
+            logging.warning(
+                "AAIBody: Following arguments were not used during initialization:\n {}".format(kwargs)
             )
+
+    @property
+    def is_sequential(self):
+        return self._sequential
+
+    @property
+    def internal_state_shape(self):
+        return self._internal_state_shape
+
+    @property
+    def output_size(self):
+        return self._hidden_size
+
+    def _forward_gru(self, x, hxs, masks):
+        if x.size(0) == hxs.size(0):
+            x, hxs = self.gru(x.unsqueeze(0), (hxs * masks).unsqueeze(0))
+            x = x.squeeze(0)
+            hxs = hxs.squeeze(0)
         else:
-            return None
+            # x is a (T, N, -1) tensor that has been flatten to (T * N, -1)
+            N = hxs.size(0)
+            T = int(x.size(0) / N)
 
-    def forward(self, input, rnn_hxs, masks, **kwargs):
+            # unflatten
+            x = x.view(T, N, x.size(1))
 
-        if self._image_only_obs:
-            x = self.image_encoder(input/255.0)
+            # Same deal with masks
+            masks = masks.view(T, N)
+
+            # Let's figure out which steps in the sequence have a zero for any agent
+            # We will always assume t=0 has a zero in it as that makes the logic cleaner
+            has_zeros = ((masks[1:] == 0.0) \
+                         .any(dim=-1)
+                         .nonzero()
+                         .squeeze()
+                         .cpu())
+
+            # +1 to correct the masks[1:]
+            if has_zeros.dim() == 0:
+                # Deal with scalar
+                has_zeros = [has_zeros.item() + 1]
+            else:
+                has_zeros = (has_zeros + 1).numpy().tolist()
+
+            # add t=0 and t=T to the list
+            has_zeros = [0] + has_zeros + [T]
+
+            hxs = hxs.unsqueeze(0)
+            outputs = []
+            for i in range(len(has_zeros) - 1):
+                # We can now process steps that don't have any zeros in masks together!
+                # This is much faster
+                start_idx = has_zeros[i]
+                end_idx = has_zeros[i + 1]
+
+                rnn_scores, hxs = self.gru(
+                    x[start_idx:end_idx],
+                    hxs * masks[start_idx].view(1, -1, 1))
+
+                outputs.append(rnn_scores)
+
+            # assert len(outputs) == T
+            # x is a (T, N, -1) tensor
+            x = th.cat(outputs, dim=0)
+            # flatten
+            x = x.view(T * N, -1)
+            hxs = hxs.squeeze(0)
+
+        return x, hxs
+
+    def _forward_attn(self, x, cached_history, masks):
+        N = cached_history.size(0)
+        obs_batch_size = x.size(0)
+        if obs_batch_size == N:
+            x, cached_history = self.attention_layer(x, cached_history, masks)
+            return x, cached_history
         else:
-            x_img = self.image_encoder(input['image']/255.0)
-            inp_extra = th.cat([input[k] for k in self._extra_obs], dim=1)
-            x_extra = self.extra_encoder(inp_extra)
-            x = th.cat([x_img, x_extra], dim=1)
+            T = obs_batch_size // N
+            x = x.view(T, N, x.size(1))
+            masks = masks.view(T, N)
+            outputs = []
+            for t in range(T):
+                out, cached_history = self.attention_layer(x[t], cached_history, masks[t])
+                outputs.append(out)
 
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+            outputs = th.cat(outputs, dim=0)
+            return outputs, cached_history
 
-        return self.critic_linear(x), x, rnn_hxs
-
-
-class ImageVecMapBase(NNBase):
-
-    def __init__(
-            self,
-            obs_space,
-            extra_obs=None,
-            recurrent=False,
-            hidden_size=512,
-            extra_encoder_dim=512,
-            image_encoder_dim=512,
-    ):
-        self._image_encoder_dim = image_encoder_dim
-        # if there is no extra_obs then we don't need an extra_encoder!
-        self._extra_encoder_dim = extra_encoder_dim if extra_obs else 0
-        self._total_encoder_dim = self._image_encoder_dim + self._extra_encoder_dim
-        # if recurrent is False there will be no layer after encoders ouputs:
-        self._hidden_size = hidden_size if recurrent else self._total_encoder_dim
-        self._extra_obs = extra_obs
-
-        super(ImageVecMapBase, self).__init__(
-            recurrent,
-            self._total_encoder_dim,
-            self._hidden_size
-        )
-
-        self.obs_shapes = self._get_obs_shapes(obs_space)
-        self._image_only_obs = isinstance(obs_space, gym.spaces.Box)
-
-        self._create_image_encoder()
-
-        if self._extra_obs:
-            self._create_extra_encoder()
-
-        self._create_critic()
-
-        self.train()
-
-    def _get_obs_shapes(self, obs_space):
-        if isinstance(obs_space, gym.spaces.Dict):
-            return {k: v.shape for k, v in obs_space.spaces.items()}
-        else:
-            return {"image": obs_space.shape}
-
-    def _create_critic(self):
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0))
-        self.critic_linear = init_(nn.Linear(self._hidden_size, 1))
-
-    def _create_image_encoder(self):
-        num_channels = self.obs_shapes['image'][0]
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), nn.init.calculate_gain('relu'))
-
-        self.image_encoder = nn.Sequential(
-            init_(nn.Conv2d(num_channels, 32, 8, stride=4)), nn.ReLU(),
-            init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
-            init_(nn.Conv2d(64, 32, 3, stride=1)), nn.ReLU(), Flatten(),
-            init_(nn.Linear(32 * 7 * 7, self._image_encoder_dim)), nn.ReLU()
-        )
-
-    def _create_map_encoder(self):
-        num_channels, H, W = self.obs_shapes['visited']
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), nn.init.calculate_gain('relu'))
-
-        self.map_encoder = nn.Sequential(
-            init_(nn.Conv2d(num_channels, 16, 4, 2)), nn.ReLU(), #was num_channes -> 16
-            init_(nn.Conv2d(16, 32, 3, 1)), nn.ReLU(), # was 16, -> 32
-            nn.AvgPool2d(2, 2),#init_(nn.Conv2d(32, 64, 3, 1)), nn.ReLU(), # was AvgPool2D without relu
-            Flatten()
-        )
-
-    def _create_extra_encoder(self):
-        input_features = 0
-        if 'visited' in self._extra_obs:
-            self._create_map_encoder()
-            input_features += conv_output_shape(self.obs_shapes['visited'], self.map_encoder)[0]
-        else:
-            self.map_encoder = None
-
-        self._vector_obs = [k for k in self._extra_obs if len(self.obs_shapes[k]) == 1]
-        for k in self._vector_obs:
-            input_features += self.obs_shapes[k][0]
-
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), nn.init.calculate_gain('relu'))
-
-        self.extra_linear = nn.Sequential(
-            init_(nn.Linear(input_features, self._extra_encoder_dim)),
-            nn.ReLU()
-        )
-
-    def extra_encoder(self, obs):
-        input = th.cat([obs[k] for k in self._vector_obs], dim=1)
-        if self.map_encoder:
-            map_embed = self.map_encoder(obs['visited'])
-            input = th.cat([input, map_embed], dim=1)
-        return self.extra_linear(input)
-
-    def forward(self, input, rnn_hxs, masks, **kwargs):
-
-        if self._image_only_obs:
-            x = self.image_encoder(input / 255.0)
-        else:
-            x_img = self.image_encoder(input['image'] / 255.0)
-            x_extra = self.extra_encoder(input)
-            x = th.cat([x_img, x_extra], dim=1)
-
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
-
-        return self.critic_linear(x), x, rnn_hxs
+    def _forward_identity(self, x, hxs, masks):
+        return x, hxs,
 
 
-class ImageVecMap2(NNBase):
+class ImageVecMap(AAIBody):
     """
-    Difference with ImageVecMapBase is that ImageVecMap2 receives all vector observations before the last layer
+    New shiny IVM arch, now you cant build multi-layered critic and policy heads and use attention
     """
     def __init__(
             self,
             obs_space,
+            body_type='ff',
             extra_obs=None,
-            recurrent=False,
-            hidden_size=512,
-            map_dim=512,
+            body_kwargs=None,
+            head_kwargs=None,
+            map_dim=384,
             image_dim=512,
-            dropout=0.0
     ):
         assert 'visited' in extra_obs, "It is better to choose different network if you are not planning to use visited map"
-        self.dropout=0.0
         self._image_encoder_dim = image_dim
-        self._map_encoder_dim = map_dim
+        self._map_encoder_dim = map_dim if 'visited' in extra_obs else 0
         # if there is no extra_obs then we don't need an extra_encoder!
         self._extra_obs = extra_obs
         self._obs_shapes = self._get_obs_shapes(obs_space)
-        self._vector_obs = [k for k in self._extra_obs if len(self._obs_shapes[k]) == 1]
+        self._vector_obs = [k for k in self._extra_obs if len(self._obs_shapes[k]) <= 2] #images has 3+ dims
         self._vector_dim =  sum(self._obs_shapes[k][0] for k in self._vector_obs)
 
         self._total_encoder_dim = self._image_encoder_dim + self._map_encoder_dim + self._vector_dim
-        # if recurrent is False there will be no layer after encoders ouputs:
-        self._hidden_size = hidden_size if recurrent else self._total_encoder_dim
 
+        self.head_kwargs = head_kwargs if head_kwargs else {}
 
-        super(ImageVecMap2, self).__init__(
-            recurrent,
-            self._total_encoder_dim,
-            self._hidden_size
-        )
+        super(ImageVecMap, self).__init__(body_type, self._total_encoder_dim, **body_kwargs)
 
+        self._build_network()
+        self.train()
+
+    def _build_network(self):
         self._create_image_encoder()
         self._create_map_encoder()
         self._create_critic()
-        self.train()
 
     def _get_obs_shapes(self, obs_space):
         if isinstance(obs_space, gym.spaces.Dict):
@@ -285,8 +263,17 @@ class ImageVecMap2(NNBase):
             return {"image": obs_space.shape}
 
     def _create_critic(self):
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0))
-        self.critic_linear = init_(nn.Linear(self._hidden_size, 1))
+        hs = self.head_kwargs.get('hidden_sizes', tuple())
+        nl = self.head_kwargs.get('nl', 'relu')
+
+        if hs:
+            critic_head = mlp_body(self._hidden_size, hs, nl)
+            final_layer = default_init(nn.Linear(hs[-1], 1))
+            critic_head.add_module(str(len(critic_head)), final_layer)
+        else:
+            critic_head = default_init(nn.Linear(self._hidden_size, 1))
+
+        self.critic_head = critic_head
 
     def _create_image_encoder(self):
         num_channels = self._obs_shapes['image'][0]
@@ -332,133 +319,64 @@ class ImageVecMap2(NNBase):
     def concat_vector_obs(self, obs):
         return th.cat([obs[k] for k in self._vector_obs], dim=1)
 
-    def forward(self, input, rnn_hxs, masks, **kwargs):
+    def forward(self, input, memory, masks, **kwargs):
         x_img = self.image_encoder(input['image'] / 255.0)
         map_embed = self.map_encoder(input['visited'])
         vector_obs = self.concat_vector_obs(input)
         x = th.cat([x_img, map_embed, vector_obs], dim=1)
 
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+        x, memory = self._body_forward(x, memory, masks)
 
-        return self.critic_linear(x), x, rnn_hxs
-
-
-def create_fc_layer(input_dim, output_dim, nl='relu'):
-    init_ = lambda m:init(m, nn.init.orthogonal_, lambda x:nn.init.
-                          constant_(x, 0), nn.init.calculate_gain(nl))
-    return init_(nn.Linear(input_dim, output_dim))
+        return self.critic_head(x), x, memory
 
 
-class ImageVecMap3(ImageVecMap2):
-    """
-    Have 2-layered heads instead of 1-layered heads in ImageVecMapBase/2
-    """
+"""
+class NaiveAttentionIVM(ImageVecMap):
+    #This thing doesn't work for now
     def __init__(
             self,
             obs_space,
             extra_obs=None,
-            recurrent=False,
-            hidden_size=512,
-            map_dim=512,
-            image_dim=512,
-            dropout=0.0
+            policy="mha",
+            hidden_size=None,
+            extra_encoder_dim=512,
+            image_encoder_dim=512,
     ):
-        assert 'visited' in extra_obs, "It is better to choose different network if you are not planning to use visited map"
-        self.dropout=0.0
-        self._image_encoder_dim = image_dim
-        self._map_encoder_dim = map_dim
-        # if there is no extra_obs then we don't need an extra_encoder!
-        self._extra_obs = extra_obs
-        self._obs_shapes = self._get_obs_shapes(obs_space)
-        self._vector_obs = [k for k in self._extra_obs if len(self._obs_shapes[k]) == 1]
-        self._vector_dim =  sum(self._obs_shapes[k][0] for k in self._vector_obs)
-
-        self._total_encoder_dim = self._image_encoder_dim + self._map_encoder_dim + self._vector_dim
-        # if recurrent is False there will be no layer after encoders ouputs:
-        self._hidden_size = hidden_size #if recurrent else self._total_encoder_dim
-
-
-        super(ImageVecMap2, self).__init__(
-            recurrent,
-            self._total_encoder_dim,
-            self._hidden_size
+        super(NaiveAttentionIVM, self).__init__(
+            obs_space,
+            extra_obs,
+            policy,
+            (extra_encoder_dim+image_encoder_dim)*2,
+            extra_encoder_dim,
+            image_encoder_dim,
         )
-
-        self._create_image_encoder()
-        self._create_map_encoder()
-        self.actor_linear = create_fc_layer(self._total_encoder_dim, self._hidden_size)
-        self._create_critic()
-        self.train()
-
-    def _create_critic(self):
-        self.crtic_linear1 = create_fc_layer(self._total_encoder_dim, self._hidden_size)
-        init_ = lambda m:init(m, nn.init.orthogonal_, lambda x:nn.init.constant_(x, 0))
-        self.critic_linear2 = init_(nn.Linear(self._hidden_size, 1))
-
-    def forward(self, input, rnn_hxs, masks, **kwargs):
-        x_img = self.image_encoder(input['image'] / 255.0)
-        map_embed = self.map_encoder(input['visited'])
-        vector_obs = self.concat_vector_obs(input)
-        x = th.cat([x_img, map_embed, vector_obs], dim=1)
-
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
-
-        v_pred = self.critic_linear2(F.relu(self.crtic_linear1(x)))
-        actor_scores = F.relu(self.actor_linear(x))
-        return v_pred, actor_scores, rnn_hxs
-
-
-import torchvision
-class AAIResnet(AAIBase):
-
-    def __init__(self, *args, **kwargs):
-        if "freeze_resnet" in kwargs:
-            self.freeze_resnet = kwargs.pop('freeze_resnet')
+        if policy == 'tc':
+            self.attention_layer = TemporalAttentionPooling(self._total_encoder_dim)
+        elif policy == 'mha':
+            self.attention_layer = NaiveHistoryAttention(self._total_encoder_dim, 2)
         else:
-            self.freeze_resnet = False
+            raise NotImplementedError("Don't what are you talking about? {}-attention?".format(policy))
 
-        super(AAIResnet, self).__init__(*args, **kwargs)
+        #self.attention_layer = TemporalAttentionPooling(self._total_encoder_dim)
+        #NaiveHistoryAttention(self._total_encoder_dim, 4)
 
-    def _create_image_encoder(self):
-        num_channels = self.obs_shapes['image'][0]
+    def _flatten_batch(self, input):
+        batch_shapes = {}
+        flatten_input = {}
+        for k,v in input.items():
+            n_data_dims =  1 if k in self._vector_obs else 3
+            data_shape = v.shape[-n_data_dims:]
+            batch_shapes[k] = v.shape[:-n_data_dims]
+            flatten_input[k] = v.view(-1, *data_shape)
 
-        net = torchvision.models.resnet18(pretrained=self.freeze_resnet)
+        return flatten_input, batch_shapes
 
-        resnet = nn.Sequential(
-            net.conv1,
-            net.bn1,
-            net.relu,
-            net.maxpool,
-            net.layer1,
-            net.layer2,
-            net.layer3,
-            net.layer4,
-            nn.AvgPool2d(kernel_size=2, stride=2, padding=0, ceil_mode=False,
-                         count_include_pad=True))
-
-        if self.freeze_resnet:
-            for p in resnet.parameters():
-                p.requires_grad = False
-        else:
-            resnet[0] = nn.Conv2d(num_channels, 64, kernel_size=7, stride=2, padding=3,
-                               bias=False)
-        return resnet
-
-    def forward(self, input, rnn_hxs, masks, **kwargs):
-
-        if self._image_only_obs:
-            x = self.image_encoder(input/255.0)
-            x = x.view(x.shape[0],-1)
-        else:
-            x_img = self.image_encoder(input['image']/255.0)
-            x_img = x_img.view(x_img.shape[0], -1)
-            inp_extra = th.cat([input[k] for k in self._extra_obs], dim=1)
-            x_extra = self.extra_encoder(inp_extra)
-            x = th.cat([x_img, x_extra], dim=1)
-
-        if self.is_recurrent:
-            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
-
-        return self.critic_linear(x), x, rnn_hxs
+    def _unflatten_batch(self, batch_dict, flatten_shapes):
+        unflatten = {}
+        for k, v in batch_dict.items():
+            batch_shape = flatten_shapes[k]
+            dim_prod, *data_shape = v.shape
+            assert dim_prod == np.prod(flatten_shapes[k]), "Error during flattening a batch!"
+            unflatten[k] = v.view(*batch_shape, *data_shape)
+        return unflatten
+"""

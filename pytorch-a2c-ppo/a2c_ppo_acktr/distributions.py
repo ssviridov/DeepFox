@@ -1,10 +1,11 @@
 import math
+from collections import OrderedDict
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from a2c_ppo_acktr.utils import AddBias, init
+from a2c_ppo_acktr.utils import AddBias, init, default_init, nonlinearities, mlp_body
 
 """
 Modify standard PyTorch distributions so they are compatible with this code.
@@ -50,21 +51,25 @@ bernoulli_entropy = FixedBernoulli.entropy
 FixedBernoulli.entropy = lambda self: bernoulli_entropy(self).sum(-1)
 FixedBernoulli.mode = lambda self: torch.gt(self.probs, 0.5).float()
 
-
 class Categorical(nn.Module):
-    def __init__(self, num_inputs, num_outputs):
+
+    def __init__(self, num_inputs, num_outputs, hidden_sizes=tuple(), nl='relu'):
         super(Categorical, self).__init__()
+        self._build_network(num_inputs, num_outputs, hidden_sizes, nl)
 
-        init_ = lambda m: init(
-            m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            gain=0.01)
+    def _build_network(self, num_inputs, num_outputs, hidden_sizes, nl):
 
-        self.linear = init_(nn.Linear(num_inputs, num_outputs))
+        if hidden_sizes:
+            policy_head = mlp_body(num_inputs, hidden_sizes, nl)
+            layer_final = default_init(nn.Linear(hidden_sizes[-1], num_outputs), 0.01)
+            policy_head.add_module(str(len(policy_head)), layer_final)
+        else:
+            policy_head = default_init(nn.Linear(num_inputs, num_outputs), 0.01)
+
+        self.policy_head = policy_head
 
     def forward(self, x):
-        x = self.linear(x)
+        x = self.policy_head(x)
         return FixedCategorical(logits=x)
 
 

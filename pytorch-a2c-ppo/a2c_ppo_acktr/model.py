@@ -39,13 +39,13 @@ class Policy(nn.Module):
             raise NotImplementedError
 
     @property
-    def is_recurrent(self):
-        return self.base.is_recurrent
+    def is_sequential(self):
+        return self.base.is_sequential
 
     @property
-    def recurrent_hidden_state_size(self):
+    def internal_state_shape(self):
         """Size of rnn_hx."""
-        return self.base.recurrent_hidden_state_size
+        return self.base.internal_state_shape
 
     def forward(self, inputs, rnn_hxs, masks):
         raise NotImplementedError
@@ -97,14 +97,14 @@ class NNBase(nn.Module):
 
 
     @property
-    def is_recurrent(self):
+    def is_sequential(self):
         return self._recurrent
 
     @property
-    def recurrent_hidden_state_size(self):
+    def internal_state_shape(self):
         if self._recurrent:
-            return self._hidden_size
-        return 1
+            return (self._hidden_size,)
+        return (1,)
 
     @property
     def output_size(self):
@@ -191,7 +191,7 @@ class CNNBase(NNBase):
     def forward(self, inputs, rnn_hxs, masks):
         x = self.main(inputs / 255.0)
 
-        if self.is_recurrent:
+        if self.is_sequential:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
         return self.critic_linear(x), x, rnn_hxs
@@ -222,7 +222,7 @@ class MLPBase(NNBase):
     def forward(self, inputs, rnn_hxs, masks):
         x = inputs
 
-        if self.is_recurrent:
+        if self.is_sequential:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
         hidden_critic = self.critic(x)
