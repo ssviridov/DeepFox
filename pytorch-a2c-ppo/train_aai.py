@@ -76,27 +76,28 @@ class DummySaver(object):
 
 def log_progress(summary,
         curr_update, curr_step, ep_rewards, ep_scaled_rewards, ep_success, ep_len,
-        ep_visited, dist_entropy, value_loss, action_loss,
+        ep_visited, ep_oracle_r, dist_entropy, value_loss, action_loss,
         fps, loop_fps,
 ):
     mean_r = np.mean(ep_rewards)
     if ep_scaled_rewards:
         mean_scaled_r = np.mean(ep_scaled_rewards)
     else:
-        mean_scaled_r = "Unscaled"
+        mean_scaled_r = 0.
     median_r = np.median(ep_rewards)
     min_r = np.min(ep_rewards)
     max_r = np.max(ep_rewards)
     mean_success = np.mean(ep_success)
     mean_eplen = np.mean(ep_len)
     mean_visited = np.mean(ep_visited)
+    mean_oracle_r = np.mean(ep_oracle_r)
     print(
         "Updates {}, num_steps {}, FPS/Loop FPS {}/{} \n"
-        "Last {} episodes:\n  mean/median R {:.2f}/{:.2f}, mean scaled R {:.2f}, min/max R {:.1f}/{:.1f}\n"
-        "  mean success {:.2f},  mean length {:.1f}, mean visted {:.1f}\n".format(
+        "Last {} episodes:\n  mean/median R {:.2f}/{:.2f}, E[scaled-R] {:.2f}, min/max R {:.1f}/{:.1f}\n"
+        "  E[success] {:.2f},  E[length] {:.1f}, E[visted] {:.1f}, E[oracle-R] {:.2f}\n".format(
             curr_update, curr_step, fps, loop_fps,
             len(ep_rewards), mean_r, median_r, mean_scaled_r,
-            min_r, max_r, mean_success, mean_eplen, mean_visited
+            min_r, max_r, mean_success, mean_eplen, mean_visited, mean_oracle_r
         )
     )
 
@@ -108,6 +109,9 @@ def log_progress(summary,
     summary.add_scalar("Env/r-median", median_r, curr_step)
     summary.add_scalar("Env/success", mean_success, curr_step)
     summary.add_scalar("Env/episode-len", mean_eplen, curr_step)
+
+    summary.add_scalar('GridOracle/visited-cells', mean_visited, curr_step)
+    summary.add_scalar('GridOracle/mean-oracle-r', mean_oracle_r, curr_step)
 
     summary.add_scalar('Loss/entropy', dist_entropy, curr_step)
     summary.add_scalar('Loss/critic', value_loss, curr_step)
@@ -261,6 +265,7 @@ def main():
     episode_success = deque(maxlen=200)
     episode_len = deque(maxlen=200)
     episode_visited = deque(maxlen=200)
+    episode_oracle_rewards = deque(maxlen=200)
 
     print(args_to_str(args))
 
@@ -298,6 +303,8 @@ def main():
                         episode_len.append(info['episode_len'])
                         if "grid_oracle" in info:
                             episode_visited.append(info["grid_oracle"]["n_visited"])
+                            episode_oracle_rewards.append(info["grid_oracle"]["episode_r"])
+
                     if args.scale_reward:
                         episode_scaled_rewards.append(info["episode_scaled_reward"])
 
@@ -340,7 +347,7 @@ def main():
                 log_progress(
                     summary, curr_update, curr_steps,
                     episode_rewards, episode_scaled_rewards, episode_success, episode_len,
-                    episode_visited,
+                    episode_visited, episode_oracle_rewards,
                     dist_entropy, value_loss, action_loss,
                     fps=fps,
                     loop_fps=int(steps_per_update/(time.time()-loop_start_time))
