@@ -9,8 +9,8 @@ from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator
 import cv2
 
 aai_path = "aai_resources/env/AnimalAI"
-aai_config_dir = "aai_resources/new_configs/" #"aai_resources/test_configs/"
-curr_config = aai_config_dir + "mazes/5_walls/5_walls_gold.yaml" #"exampleConfig.yaml"
+aai_config_dir = "aai_resources/test_configs/" #"aai_resources/test_configs/"
+curr_config = aai_config_dir + "mem-tests/left.yaml" #"exampleConfig.yaml"
 
 
 class EnvInteractor(SimpleImageViewer):
@@ -111,7 +111,7 @@ class EnvInteractor(SimpleImageViewer):
 
 
 def main():
-    rank = np.random.randint(0, 1000)
+    rank = 1300# np.random.randint(0, 1000)
     viewer = EnvInteractor()
     gen_config = SingleConfigGenerator.from_file(curr_config)
     gen_config.config.arenas[0].t = 5000
