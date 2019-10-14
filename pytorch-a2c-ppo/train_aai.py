@@ -75,11 +75,15 @@ class DummySaver(object):
 
 
 def log_progress(summary,
-        curr_update, curr_step, ep_rewards, ep_success, ep_len,
+        curr_update, curr_step, ep_rewards, ep_scaled_rewards, ep_success, ep_len,
         ep_visited, dist_entropy, value_loss, action_loss,
         fps, loop_fps,
 ):
     mean_r = np.mean(ep_rewards)
+    if ep_scaled_rewards:
+        mean_scaled_r = np.mean(ep_scaled_rewards)
+    else:
+        mean_scaled_r = "Unscaled"
     median_r = np.median(ep_rewards)
     min_r = np.min(ep_rewards)
     max_r = np.max(ep_rewards)
@@ -88,16 +92,19 @@ def log_progress(summary,
     mean_visited = np.mean(ep_visited)
     print(
         "Updates {}, num_steps {}, FPS/Loop FPS {}/{} \n"
-        "Last {} episodes:\n  mean/median R {:.2f}/{:.2f}, min/max R {:.1f}/{:.1f}\n"
+        "Last {} episodes:\n  mean/median R {:.2f}/{:.2f}, mean scaled R {:.2f}, min/max R {:.1f}/{:.1f}\n"
         "  mean success {:.2f},  mean length {:.1f}, mean visted {:.1f}\n".format(
             curr_update, curr_step, fps, loop_fps,
-            len(ep_rewards), mean_r, median_r,
+            len(ep_rewards), mean_r, median_r, mean_scaled_r,
             min_r, max_r, mean_success, mean_eplen, mean_visited
         )
     )
 
     if summary is None: return
     summary.add_scalar("Env/r-mean", mean_r, curr_step)
+    if ep_scaled_rewards:
+        summary.add_scalar("Env/r-scaled-mean", mean_scaled_r, curr_step)
+
     summary.add_scalar("Env/r-median", median_r, curr_step)
     summary.add_scalar("Env/success", mean_success, curr_step)
     summary.add_scalar("Env/episode-len", mean_eplen, curr_step)
@@ -158,7 +165,9 @@ def main():
         headless=args.headless,
         grid_oracle_kwargs=args.real_oracle_args,
         image_only=len(args.extra_obs) == 0,
-        docker_training=args.docker_training
+        docker_training=args.docker_training,
+        reduced_actions=args.reduced_actions,
+        scale_reward=args.scale_reward
     )
 
     #Create Agent:
@@ -234,6 +243,10 @@ def main():
     rollouts.to(device)
 
     episode_rewards = deque(maxlen=200)
+    if args.scale_reward:
+        episode_scaled_rewards = deque(maxlen=200)
+    else:
+        episode_scaled_rewards = None
     episode_success = deque(maxlen=200)
     episode_len = deque(maxlen=200)
     episode_visited = deque(maxlen=200)
@@ -267,11 +280,14 @@ def main():
                 obs, reward, done, infos = envs.step(action)
                 for info in infos:
                     if 'episode_reward' in info.keys():
+                        #print('TRAIN: EPISODE IS DONE!')
                         episode_rewards.append(info['episode_reward'])
                         episode_success.append(info['episode_success'])
                         episode_len.append(info['episode_len'])
                         if "grid_oracle" in info:
                             episode_visited.append(info["grid_oracle"]["n_visited"])
+                    if args.scale_reward:
+                        episode_scaled_rewards.append(info["episode_scaled_reward"])
 
                 # If done then clean the history of observations.
                 masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done])
@@ -311,7 +327,7 @@ def main():
                     fps = int(curr_steps/(time.time()-start_time))
                 log_progress(
                     summary, curr_update, curr_steps,
-                    episode_rewards, episode_success, episode_len,
+                    episode_rewards, episode_scaled_rewards, episode_success, episode_len,
                     episode_visited,
                     dist_entropy, value_loss, action_loss,
                     fps=fps,

@@ -50,9 +50,9 @@ parser.add_argument(
     help='Path to a directory with AnimalAI default_configs')
 
 parser.add_argument(
-    '-n', '--num-episodes',
+    '-n', '--num-repeat',
     type=int, default=1,
-    help='Number of episodes to play!'
+    help='Number of times we play each config in the env-path folder'
 )
 
 parser.add_argument(
@@ -70,7 +70,7 @@ if args.seed is None:
     args.seed = np.random.randint(1000)
 
 device = torch.device("cuda:0" if args.cuda else "cpu")
-gen_config = HierarchicalSampler.create_from_dir(args.config_dir)
+gen_config = ListSampler.create_from_dir(args.config_dir)
 #gen_config = SingleConfigGenerator.from_file("aai_resources/test_configs/time_limits/empty_yellow.yaml")
 
 train_args = load_args(os.path.dirname(args.model_path))
@@ -114,7 +114,11 @@ episode_steps = []
 configs2reward={}
 configs2success={}
 
-for episode in range(args.num_episodes):
+num_configs = len(gen_config.config_names)
+num_episodes = args.num_repeat*num_configs
+print("Play {} configs {} times".format(num_configs, args.num_repeat))
+
+for episode in range(num_episodes):
     rnn_state = torch.zeros(1, actor_critic.recurrent_hidden_state_size).to(device)
 
     masks = torch.zeros(1, 1).to(device)
@@ -139,7 +143,6 @@ for episode in range(args.num_episodes):
         total_r += reward.item()
         time.sleep(args.delay)
         if done:
-
             break
         #masks.fill_(0.0 if done else 1.0)
     episode_rewards.append(info[0]['episode_reward'])
@@ -151,7 +154,7 @@ for episode in range(args.num_episodes):
 
     print('total_r={:0.2f}, num_steps={}\n'.format(total_r, t))
 
-print('Played {} episodes total:'.format(args.num_episodes))
+print('Played {} episodes total:'.format(num_episodes))
 print('Mean R: {:0.2f}'.format(np.mean(episode_rewards)))
 print("Median R: {:0.2f}".format(np.median(episode_rewards)))
 print('Mean success: {:0.2f}'.format(np.mean(episode_success)))
