@@ -19,6 +19,12 @@ def get_args():
         help='Training in docker')
 
     parser.add_argument(
+        '--scale-reward',
+        action='store_true',
+        default=False,
+        help='Training in docker')
+
+    parser.add_argument(
         '--restart',
         default=None,
         help='Path to model checkpoint')
@@ -27,6 +33,7 @@ def get_args():
         '--config-dir',
         default='aai_resources/default_configs',
         help='Path to a directory with AnimalAI default_configs')
+
     parser.add_argument(
         '-hl', '--headless',
         action='store_true',
@@ -41,6 +48,12 @@ def get_args():
     parser.add_argument(
         '-fs', '--frame-stack', type=int, default=2,
         help="Number of image frames to stack into agent's observation, (default: 2)",
+    )
+    parser.add_argument(
+        '--reduced-actions',
+        action='store_true',
+        default=False,
+        help="Removes backward movements from agent's action space. (default: False)"
     )
     #GRID-ORACLE arguments:
     #parser.add_argument(

@@ -291,12 +291,17 @@ class GridOracleWithAngles(Preprocessor):
                 env.metadata)
 
     def reset(self, obs):
+        #print('GRID ORACLE IS RESET!')
         self._visited[:] = 0
-        #self._visited[self.start_angle, self.start_x, self.start_z] = 1.
-        self.num_visited = 1
+        self.num_visited = 0
+
+        coords = self._cell_coords(obs['pos'], obs['angle'])
+        expl_r = self._visit(*coords)
+
         return self._observation(obs)
 
     def step(self, act, obs, r, done, info):
+        #if done:  print('GRID ORACLE HAS SEEN DONE!')
         self._discount_visited()
 
         coords = self._cell_coords(obs['pos'], obs['angle'])
@@ -310,6 +315,10 @@ class GridOracleWithAngles(Preprocessor):
             r = expl_r
         else:
             r = r + expl_r
+
+        #print('visited != 0: ', (self._visited > 0.).sum(),
+        #      'num_visited:', self.num_visited,
+        #      "visited now: ", (self._visited > 0.5).sum(),)
 
         return obs, r, done, info
 
