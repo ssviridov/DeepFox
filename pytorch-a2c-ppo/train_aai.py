@@ -271,7 +271,7 @@ def main():
                     #assert torch.equal(obs['image'], rollouts.obs[step].asdict()['image']), 'woy!! this is strange!
                     value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
                         obs, #rollouts.obs[step],
-                        rollouts.recurrent_hidden_states[step],
+                        rollouts.internal_states[step],
                         rollouts.masks[step])
 
                 #/no_grad
@@ -299,7 +299,7 @@ def main():
     #            assert torch.equal(obs['image'], rollouts.obs[-1].asdict()['image']), 'woy!! this is strange!'
                 next_value = actor_critic.get_value(
                     obs, #rollouts.obs[-1],
-                    rollouts.recurrent_hidden_states[-1],
+                    rollouts.internal_states[-1],
                     rollouts.masks[-1]).detach()
 
 

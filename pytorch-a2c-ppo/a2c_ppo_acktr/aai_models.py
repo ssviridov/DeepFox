@@ -108,7 +108,7 @@ class AAIBody(nn.Module):
         self._memory_len = kwargs.pop('memory_len', 10)
         self.attention_layer = CachedAttention(attn, self._memory_len)
 
-        self._internal_state_shape = (self._memory_len, self._hidden_size)
+        self._internal_state_shape = (self._memory_len, input_size)
         self._body_forward = self._forward_attn
 
     def _init_none(self, input_size, kwargs):
@@ -327,7 +327,7 @@ class ImageVecMap(AAIBody):
 
         x, memory = self._body_forward(x, memory, masks)
 
-        return self.critic_linear(x), x, memory
+        return self.critic_head(x), x, memory
 
 
 """
