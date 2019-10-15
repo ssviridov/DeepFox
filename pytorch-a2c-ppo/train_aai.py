@@ -353,7 +353,10 @@ def main():
                     loop_fps=int(steps_per_update/(time.time()-loop_start_time))
                 )
 
-                # save for every interval-th episode or for the last epoch
+                #if curr_steps > 5000000:
+                #    break
+
+            # save for every interval-th episode or for the last epoch
             if len(episode_rewards) == episode_rewards.maxlen:
                 model_saver.save_model(
                     curr_update, curr_steps,

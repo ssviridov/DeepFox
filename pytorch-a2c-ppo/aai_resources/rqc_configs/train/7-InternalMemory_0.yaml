@@ -1,0 +1,8 @@
+!ArenaConfig
+arenas:
+  0: !Arena
+    t: 100
+    blackouts: [-20]
+    items:
+    - !Item
+      name: GoodGoal

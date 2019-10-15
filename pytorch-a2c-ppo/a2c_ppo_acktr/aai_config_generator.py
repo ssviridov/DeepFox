@@ -2,9 +2,9 @@ import numpy as np
 import glob
 import pathlib
 import os.path
-from animalai.envs.arena_config import ArenaConfig
+from animalai.envs.arena_config import ArenaConfig, RGB, Item
 import logging
-
+import copy
 
 class ConfigGenerator(object):
     """
@@ -159,6 +159,13 @@ class HierarchicalSampler(ConfigGenerator):
             return {'config':choice, "config_name":name}
 
 
+def deep_config_update(target, source):
+    """Really copies everyhing from source config to target config"""
+
+    for arena_i in source.arenas:
+        target.arenas[arena_i] = copy.deepcopy(source.arenas[arena_i])
+
+
 class ConfigGeneratorWrapper(ConfigGenerator):
     """
     For classes that modify already generated configs.
@@ -166,12 +173,15 @@ class ConfigGeneratorWrapper(ConfigGenerator):
     """
     def __init__(self, config_generator):
         self.generator = config_generator
+        self._tmp_config = ArenaConfig()
 
     def shuffle(self):
         self.generator.shuffle()
 
     def next_config(self, *args, **kwargs):
         config_dict = self.generator.next_config(*args, **kwargs)
+        deep_config_update(self._tmp_config, source=config_dict['config'])
+        config_dict['config']= self._tmp_config
         return self.process_config(config_dict)
 
     def process_config(self, config_dict):
@@ -186,57 +196,71 @@ class FixedTimeGenerator(ConfigGeneratorWrapper):
     def __init__(self, config_generator, time):
         super(FixedTimeGenerator, self).__init__(config_generator)
         self.time = time
-        self._config = ArenaConfig()
 
     def process_config(self, config_dict):
-        self._config.update(config_dict['config'])
-        self._config.arenas[0].t = self.time
-        config_dict['config'] = self._config
-
+        config_dict['config'].arenas[0].t = self.time
         return config_dict
 
 
-class RandomizedGenerator(ConfigGenerator):
+class RandomizedGenerator(ConfigGeneratorWrapper):
     """
     A generator that randomizes objects properties:
     changes color, sets blackouts, replaces an object with similar one.
 
     !NOT DONE YET!
-
     """
 
     PERMUTABLE_OBJECTS=(
-        {"WallTransparent", "Wall"},
-        {"CardBox1", "CardBox2"},
-        {"CylinderTunnel", "CylinderTunnelTransparent"},
-        {"UObject", "LObject", "LObject2"}
+        ["WallTransparent", "Wall"],
+        ["CardBox1", "CardBox2"],
+        ["CylinderTunnel", "CylinderTunnelTransparent"],
+        ["UObject", "LObject", "LObject2"]
     )
 
     PERMUTABLE_COLORS = (
-        {(153,153, 153), (-1., -1, -1), (0, 255, 0)},
-        {(255, 0, 255), (-1., -1, -1)}
+        [(255, 0, 255), (153, 153, 153), (-1., -1, -1), (0, 255, 0), (255, 215, 0)]
     )
 
-    def __init__(self, config_generator, object_change_prob=0.5, color_change_prob=0.5):
-        self.generator = config_generator
+    PAINTABLE_OBJECTS = {'Wall', 'CylinderTunnel', "Ramp"}
+
+    BLACKOUTS = [[-20], [-40]]
+
+    def __init__(self, config_generator, blackout_prob=0.1, object_change_prob=0.2, color_change_prob=0.2):
+        super(RandomizedGenerator, self).__init__(config_generator)
+        self.blackout_prob=blackout_prob
         self.object_change_prob = object_change_prob
         self.color_change_prob = color_change_prob
-        self._config = ArenaConfig() # we need this config in order to keep original configs intact
 
-    def shuffle(self):
-        self.generator.shuffle()
+    def process_config(self, config_dict):
+        config = config_dict['config']
+        print('Randomizing[ocp={:0.2f}, ccp={:0.2f}] {}'.format(self.object_change_prob, self.color_change_prob, config_dict['config_name']))
 
-    def next_config(self, *args, **kwargs):
-        conf_dict = self.generator.next_config(*args, **kwargs)
-        self._config.update(conf_dict['config'])
 
-    def _randomize_config(self, config):
+        for k, arena in config.arenas.items():
+            if not len(arena.blackouts):
+                arena.blackouts = [-100] #[-20]
 
-        for k, arena in self._config.arenas.items():
-            for item in arena.items:
-                if self.object_change_prob:
+            for it_id, item in enumerate(arena.items):
+                change_obj = self.object_change_prob > np.random.random()
+                print('Try to change {}: {}'.format(item.name, change_obj))
+                if change_obj:
                     for group in self.PERMUTABLE_OBJECTS:
                         if item.name in group:
-                            item.name = np.random.choice(group)
+                            new_name = np.random.choice(group)
+                            print('Changing {} with {}'.format(item.name, new_name))
+                            if new_name != item.name:
+                                arena.items[it_id] = Item(new_name, item.positions, item.rotations, item.sizes, item.colors)
+                                item = arena.items[it_id]
+                                print('Object {} was changed to {}'.format(item.name, new_name))
                             break
+                if item.name in self.PAINTABLE_OBJECTS:
+                    for c_id, rgb in enumerate(item.colors):
+                        if self.color_change_prob > np.random.random():
+                            color = rgb.r, rgb.g, rgb.b
+                            if color in self.PERMUTABLE_COLORS:
+                                new_color_id = np.random.choice(len(self.PERMUTABLE_COLORS))
+                                new_color = self.PERMUTABLE_COLORS[new_color_id]
+                                item.colors[c_id] = RGB(*new_color)
+                                #print('{}#{}: changed RGB{} to RGB{}'.format(item.name, c_id, color, new_color))
 
+        return config_dict

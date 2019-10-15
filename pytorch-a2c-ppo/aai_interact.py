@@ -5,12 +5,13 @@ from gym.envs.classic_control.rendering import SimpleImageViewer
 import numpy as np
 import pyglet.window
 from a2c_ppo_acktr.aai_wrapper import make_env_aai
-from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator, ListSampler, FixedTimeGenerator
+from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator, ListSampler, \
+    FixedTimeGenerator, RandomizedGenerator
 import cv2
 
 aai_path = "aai_resources/env/AnimalAI"
-config_path = "aai_resources/new_configs/" #"aai_resources/test_configs/"
-config_path = config_path + "mazes" #/5_walls/5_walls_gold.yaml"
+config_path = "aai_resources/bio_configs/" #"aai_resources/test_configs/"
+config_path = config_path + "Hebb-Williams_4.yaml" #/5_walls/5_walls_gold.yaml"
 
 
 def get_config_name(env_aai):
@@ -118,13 +119,15 @@ class EnvInteractor(SimpleImageViewer):
 def main():
     if config_path.endswith("yaml"):
         gen_config = SingleConfigGenerator.from_file(config_path)
-        num_episodes = 1
+        num_episodes = 5
     else:
         gen_config = ListSampler.create_from_dir(config_path)
         num_episodes = len(gen_config.configs)
-    gen_config = FixedTimeGenerator(gen_config, 1500)
 
-    rank = np.random.randint(0, 800)
+    gen_config = FixedTimeGenerator(gen_config, 1500)
+    gen_config = RandomizedGenerator(gen_config, 0.9, 0.3)
+
+    rank = np.random.randint(1200, 2000)
     viewer = EnvInteractor()
 
 
@@ -189,6 +192,8 @@ def record_episode(seed, env, viewer):
     actions =  [1]*800 #[0]*100 +  [1]*15 + [0]*10 + [1]*15 + [0]*10 + [1]*15 + [0]*10 + [1]*15 + [0]*5000
     #map_window = SimpleImageViewer(400)
     #print("Step #0 angle: {:.1f}".format(angle360(obs)))
+    max_blackout = [0]
+    curr_blackout = [0]
 
     def step(action):
         #action = actions[total_steps[0]]
@@ -207,6 +212,9 @@ def record_episode(seed, env, viewer):
 
         time.sleep(0.025)
         color = obs['image'][42,42]
+        curr_blackout[0] = (curr_blackout[0]+1)*(obs['image'].max() <= 0.)
+        max_blackout[0] = max(curr_blackout[0], max_blackout[0])
+
         print("\rstep#{} speed_r={:0.4f} angle={:.1f}, pos=({:.2f}, {:.2f}, {:.2f}),"
               " speed=({:.2f}, {:.2f}, {:.2f}), n_visited={}, expl_r={}, pixel[42,42]: {}".format(
             total_steps[0], speed_reward,
@@ -222,7 +230,7 @@ def record_episode(seed, env, viewer):
         #print("VISITED:\n", obs['visited'][0])
         #map_window.imshow(map2img(obs['visited']))
         if done:
-            print('\nFinal Reward: {}, INFO: {}'.format(rew, info))
+            print('\nFinal Reward: {}, max_blackout: {}\nINFO: {}\n'.format(rew, max_blackout[0], info))
             return None
 
         return img

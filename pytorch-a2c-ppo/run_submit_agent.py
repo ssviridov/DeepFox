@@ -48,7 +48,7 @@ if __name__ == "__main__":
     from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
     #gen_config = ListSampler.create_from_dir("aai_resources/default_configs/")
     gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/1-Food.yaml")
-    agent = Agent('submission/data/pretrained/gpu2-default2/sub_config.yaml')
+    agent = Agent('submission/data/pretrained/mixed-configs/sub_config.yaml')
     env = create_env(3)
 
     #config = gen_config.next_config()
