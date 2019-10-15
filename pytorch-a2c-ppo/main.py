@@ -112,7 +112,7 @@ def main():
             # Sample actions
             with torch.no_grad():
                 value, action, action_log_prob, recurrent_hidden_states = actor_critic.act(
-                    rollouts.obs[step], rollouts.recurrent_hidden_states[step],
+                    rollouts.obs[step], rollouts.internal_states[step],
                     rollouts.masks[step])
 
             # Obser reward and next obs
@@ -133,7 +133,7 @@ def main():
 
         with torch.no_grad():
             next_value = actor_critic.get_value(
-                rollouts.obs[-1], rollouts.recurrent_hidden_states[-1],
+                rollouts.obs[-1], rollouts.internal_states[-1],
                 rollouts.masks[-1]).detach()
 
         if args.gail:

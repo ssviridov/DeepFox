@@ -14,7 +14,7 @@ from baselines import bench
 from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 
-from a2c_ppo_acktr.envs import TransposeImage, VecPyTorch, VecPyTorchFrameStack, VecPyTorchFrameStackDictObs, ShmemVecEnv
+from a2c_ppo_acktr.envs import VecPyTorch, VecPyTorchFrameStack, VecPyTorchFrameStackDictObs, VecHistoryFrameStack, ShmemVecEnv
 from .aai_config_generator import SingleConfigGenerator
 from .aai_env_fixed import UnityEnvHeadless
 from .preprocessors import GridOracle, GridOracleWithAngles, MetaObs
@@ -268,7 +268,7 @@ def make_vec_envs_aai(
                          headless, grid_oracle_kwargs, **env_kwargs)
             for i in range(num_processes)]
 
-    if len(envs) > 0:
+    if len(envs) > 2:
         make_test = make_env_aai(env_path, config_generator,
                                  seed+num_processes+1, headless,
                                  grid_oracle_kwargs,**env_kwargs)
@@ -286,6 +286,9 @@ def make_vec_envs_aai(
     envs = VecPyTorch(envs, device)
 
     if num_frame_stack is not None:
+        #VecHistoryFrameStack - stacks all observations in dict along a new dimention
+        #envs = VecHistoryFrameStack(envs, num_frame_stack, device)
+
         if isinstance(envs.observation_space, gym.spaces.Box):
             envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
         else:

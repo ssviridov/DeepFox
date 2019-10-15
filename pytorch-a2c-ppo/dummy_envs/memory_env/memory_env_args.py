@@ -1,81 +1,27 @@
 import argparse
 import datetime
-import torch
 import os.path as ospath
-import json
+import torch
 
 def get_args():
     parser = argparse.ArgumentParser(description='RL')
-    #AAI specific arguments:
-    parser.add_argument(
-        '--env-path',
-        default='aai_resources/env/AnimalAI',
-        help='Path to the game file')
-
-    parser.add_argument(
-        '--docker-training',
-        action='store_true',
-        default=False,
-        help='Training in docker')
-
-    parser.add_argument(
-        '--scale-reward',
-        action='store_true',
-        default=False,
-        help='Training in docker')
 
     parser.add_argument(
         '--restart',
         default=None,
         help='Path to model checkpoint')
 
+    #AAI specific arguments:
     parser.add_argument(
-        '--config-dir',
-        default='aai_resources/default_configs',
-        help='Path to a directory with AnimalAI default_configs')
-
-    parser.add_argument(
-        '-hl', '--headless',
-        action='store_true',
-        default=False,
-        help='Use headless mod to train UnityEnvironment on server'
-    )
-    parser.add_argument(
-        '--extra-obs', type=str, nargs='*', default=tuple(),
-        help="A list of additional observations for agents to receive. "
-             "Possible choices are: pos, speed, angle"
-    )
-    parser.add_argument(
-        '-fs', '--frame-stack', type=int, default=2,
+        '-fs', '--frame-stack', type=int, default=1,
         help="Number of image frames to stack into agent's observation, (default: 2)",
     )
     parser.add_argument(
-        '--reduced-actions',
-        action='store_true',
-        default=False,
-        help="Removes backward movements from agent's action space. (default: False)"
-    )
-    #GRID-ORACLE arguments:
-    #parser.add_argument(
-    #    "--oracle-type", '-ot', default="angles", choices=("3d", "angles"),
-    #    help="Which GridOracle you want to use, hint: use angles"
-    #)
-    parser.add_argument(
-        '--oracle-num-angles', '-ona', default=15, type=int,
-        help='Number of angle bins in the visitation map. '
-             '(default: 15, this means one bin covers 24 degrees)'
-    )
-    parser.add_argument(
-        '--oracle-cell-side', '-ocs', default=2., type=int,
-        help='Size of a single grid cell. (default: 2.)'
-    )
-    parser.add_argument(
-        "--oracle-reward", "-or", default=-1./100., type=float,
-        help=" If reward > 0 then agents gets this reward when it visits grid cell,"
-             " otherwise it is a penalty given to the agent when it stays in the visited"
-             " cell for more than one step. (default: -1./100)"
+        "--episode-length", "-el", default=5, type=int,
+        help="Length of an episode"
         )
-
+    parser.add_argument(
+        '-hs', '--hidden-size', default=64, type=int, help='Size of hidden layers')
     #PPO/A2C arguments:
     parser.add_argument(
         '--algo', default='a2c', help='algorithm to use: a2c | ppo | acktr')
@@ -163,11 +109,11 @@ def get_args():
         type=int,
         default=100,
         help='save interval, one save per n updates (default: 100)')
-    #parser.add_argument(
-    #    '--eval-interval',
-    #    type=int,
-    #    default=None,
-    #    help='eval interval, one eval per n updates (default: None)')
+    parser.add_argument(
+        '--eval-interval',
+        type=int,
+        default=None,
+        help='eval interval, one eval per n updates (default: None)')
     parser.add_argument(
         '--num-env-steps',
         type=int,
@@ -183,27 +129,22 @@ def get_args():
         default=None,
         help='tag of the current experiment. '
              'It affect name of the written summaries, and path to saved weights. '
-             '(default: <current-time>)'
-    )
+             '(default: <current-time>)')
     parser.add_argument(
-        '--device',
-        type=int,
-        default=0,
-        help='choose your gpu device, if device == -1 then use cpu!')
+        '--no-cuda',
+        action='store_true',
+        default=False,
+        help='disables CUDA training')
     parser.add_argument(
         '--use-proper-time-limits',
         action='store_true',
         default=False,
         help='compute returns taking into account time limits')
     parser.add_argument(
-        '-pol','--policy',
-        choices=('rnn', 'ff', 'cached_mha', 'cached_tc'),
+        '-pol', '--policy',
+        choices=('rnn', 'ff', 'mha', 'tc', 'cached_tc', 'cached_mha'),
         default="ff",
-        help='Choose policy: feedforward, recurrent, or a policy with temporal attention (default: ff)'
-    )
-    parser.add_argument(
-        '-ml', '--memory-len', type=int, default=20,
-        help='Determines the size of memory window for an attention based policy (default: 20)'
+        help='Choose policy: feedforward, recurrent, or based on multihead attention!'
     )
     parser.add_argument(
         '--use-linear-lr-decay',
@@ -212,18 +153,7 @@ def get_args():
         help='use a linear schedule on the learning rate')
     args = parser.parse_args()
 
-    args.cuda = args.device >= 0 and torch.cuda.is_available()
-
-    if args.restart:
-        d = vars(args)
-        config_path = ospath.dirname(args.restart)
-        with open(config_path + '/train_args.json', 'r') as f:
-            config = json.load(f)
-        for k, v in config.items():
-            d[k] = v
-
-    if not args.policy.startswith('cached'):
-        args.memory_len = 1
+    args.cuda = not args.no_cuda and torch.cuda.is_available()
 
     if not getattr(args, 'experiment_tag', None):
         date = datetime.datetime.now()
@@ -232,7 +162,7 @@ def get_args():
     args.summary_dir = ospath.join(args.save_dir, "summaries", args.experiment_tag)
 
     assert args.algo in ['a2c', 'ppo', 'acktr']
-    if args.policy != 'ff':
+    if args.policy == "rnn":
         assert args.algo in ['a2c', 'ppo'], \
             'Recurrent policy is not implemented for ACKTR'
 

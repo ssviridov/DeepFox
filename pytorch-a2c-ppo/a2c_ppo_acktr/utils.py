@@ -6,6 +6,11 @@ import torch.nn as nn
 
 from a2c_ppo_acktr.envs import VecNormalize
 
+nonlinearities = {
+        "relu": nn.ReLU,
+        'leaky_relu': nn.LeakyReLU,
+        'tanh': nn.Tanh,
+    }
 
 # Get a render function
 def get_render_func(venv):
@@ -51,9 +56,36 @@ def update_linear_schedule(optimizer, epoch, total_num_epochs, initial_lr):
 
 
 def init(module, weight_init, bias_init, gain=1):
+    if isinstance(gain, str):
+        gain = nn.init.calculate_gain(gain)
+
     weight_init(module.weight.data, gain=gain)
     bias_init(module.bias.data)
     return module
+
+
+def default_init(module, gain=1):
+    return init(
+        module, nn.init.orthogonal_,
+        lambda x:nn.init.constant_(x, 0),
+        gain
+    )
+
+def mlp_body(num_inputs, hidden_sizes, nl='relu', layer_init=None):
+    if layer_init is None:
+        layer_init=lambda m: default_init(m, nl)
+
+    nl_module = nonlinearities[nl]
+
+    layers = []
+    prev_dim = num_inputs
+    for i, h in enumerate(hidden_sizes):
+        layers.append( layer_init(nn.Linear(prev_dim, h)))
+        layers.append( nl_module() )
+        prev_dim = h
+
+    model = nn.Sequential(*layers)
+    return model
 
 
 def cleanup_log_dir(log_dir):
