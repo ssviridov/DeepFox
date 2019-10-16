@@ -93,18 +93,20 @@ class AAIBody(nn.Module):
     def _init_attn(self, input_size, kwargs):
 
         self._sequential = True
-        self._hidden_size = 2 * kwargs.pop('hidden_size', input_size)
 
         if self._body_type.endswith('tc'):
             attn = TemporalAttentionPooling(input_size)
 
         elif self._body_type.endswith('mha'):
             attn_heads = kwargs.pop('attention_heads', 3)
-            attn = NaiveHistoryAttention(input_size, attn_heads)
+            residual = kwargs.pop('residual', False)
+            layer_norm = kwargs.pop('layer_norm', False)
+            attn = NaiveHistoryAttention(input_size, attn_heads,residual,layer_norm)
 
         else:
             raise NotImplementedError("{}? What is that?".format(self._body_type))
 
+        self._hidden_size = kwargs.pop('hidden_size', attn.features_out)
         self._memory_len = kwargs.pop('memory_len', 10)
         self.attention_layer = CachedAttention(attn, self._memory_len)
 

@@ -33,6 +33,7 @@ class TemporalAttentionPooling(nn.Module):
     def __init__(self, features_in, activation=None, kernel_size=1, **params):
         super().__init__()
         self.features_in = features_in
+        self.features_out = features_in*2
         activation = activation or "softmax"
 
         self.attention_pooling = nn.Sequential(
@@ -67,9 +68,14 @@ class TemporalAttentionPooling(nn.Module):
 
 class NaiveHistoryAttention(nn.Module):
 
-    def __init__(self, embed_dim, num_heads):
+    def __init__(self, embed_dim, num_heads, residual=False, layer_norm=False):
+        self.features_in = embed_dim
         super(NaiveHistoryAttention, self).__init__()
+        self.features_out = embed_dim if residual else embed_dim * 2
         self.mha = nn.MultiheadAttention(embed_dim, num_heads)
+
+        self.layer_norm = nn.LayerNorm(self.features_out) if layer_norm else None
+        self.residual = residual
 
     def forward(self, cur_obs, memory_window):
         "Input should have the shape (batch_size, time_steps, embed_dim)"
@@ -78,7 +84,15 @@ class NaiveHistoryAttention(nn.Module):
         query = cur_obs.unsqueeze(0)
         keys = memory_window.transpose(0,1)
         attn_mem, attn_weights = self.mha(query, keys, keys)
-        result = th.cat((query, attn_mem),dim=2).squeeze(0)
+
+        if not self.residual:
+            result = th.cat((query, attn_mem),dim=2).squeeze(0)
+        else:
+            result = (query + attn_mem).squeeze(0)
+
+        if self.layer_norm:
+            result = self.layer_norm(result)
+
         return result #batch_size, 2*embedding dim
 
 

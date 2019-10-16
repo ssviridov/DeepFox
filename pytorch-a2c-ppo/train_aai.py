@@ -139,6 +139,8 @@ def make_model_kwargs(args):
     elif args.policy.startswith('cached'):
         body_kwargs['memory_len']= getattr(args, 'memory_len', 20)
         body_kwargs['attention_heads'] = getattr(args, 'attention_heads', 3) #ignored with cached_tc
+        # body_kwargs['residual']=True
+        # body_kwargs['layer_norm']=True
 
     model_kwargs = dict(
         body_type=args.policy,
