@@ -268,7 +268,7 @@ def make_vec_envs_aai(
                          headless, grid_oracle_kwargs, **env_kwargs)
             for i in range(num_processes)]
 
-    if len(envs) > 0:
+    if len(envs) > 2:
         make_test = make_env_aai(env_path, config_generator,
                                  seed+num_processes+1, headless,
                                  grid_oracle_kwargs,**env_kwargs)

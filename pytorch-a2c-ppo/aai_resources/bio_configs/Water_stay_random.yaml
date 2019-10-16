@@ -1,0 +1,22 @@
+!ArenaConfig
+arenas:
+  0: !Arena
+    t: 250
+    items:
+    - !Item
+      name: DeathZone
+      rotations: [0]
+      positions:
+        - !Vector3 {x: 20, y: 0, z: 20}
+      sizes:
+        - !Vector3 {x: 39, y: 0, z: 39}
+    - !Item
+      name: Wall
+      positions:
+        - !Vector3 {x: 20, y: 0, z: 20}
+      sizes:
+        - !Vector3 {x: 10, y: 0.125, z: 10}
+    - !Item
+      name: Agent
+      positions:
+        - !Vector3 {x: 20, y: .125, z: 20}

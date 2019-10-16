@@ -71,7 +71,7 @@ if args.seed is None:
 
 device = torch.device("cuda:0" if args.cuda else "cpu")
 gen_config = ListSampler.create_from_dir(args.config_dir)
-#gen_config = SingleConfigGenerator.from_file("aai_resources/test_configs/time_limits/empty_yellow.yaml")
+#gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs2/article-maze1.yaml")
 
 train_args = load_args(os.path.dirname(args.model_path))
 
