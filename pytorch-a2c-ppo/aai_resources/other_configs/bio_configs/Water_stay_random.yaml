@@ -5,10 +5,11 @@ arenas:
     items:
     - !Item
       name: DeathZone
+      rotations: [0]
       positions:
         - !Vector3 {x: 20, y: 0, z: 20}
       sizes:
-        - !Vector3 {x: 39, y: 0, z: 39}
+        - !Vector3 {x: 40, y: 0, z: 40}
     - !Item
       name: Wall
       positions:

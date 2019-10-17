@@ -10,8 +10,8 @@ from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator, ListSample
 import cv2
 
 aai_path = "aai_resources/env/AnimalAI"
-config_path = "aai_resources/bio_configs/" #"aai_resources/test_configs/"
-config_path = config_path + "Hebb-Williams_4.yaml" #/5_walls/5_walls_gold.yaml"
+config_path = "aai_resources/asorokin/" #"aai_resources/test_configs/"
+config_path = config_path + "configs3/bad_zones/red_zone/Water_stay_random.yaml" #/5_walls/5_walls_gold.yaml"
 
 
 def get_config_name(env_aai):
@@ -125,7 +125,7 @@ def main():
         num_episodes = len(gen_config.configs)
 
     gen_config = FixedTimeGenerator(gen_config, 1500)
-    gen_config = RandomizedGenerator(gen_config, 0.9, 0.3)
+    #gen_config = RandomizedGenerator(gen_config, 0.9, 0.3)
 
     rank = np.random.randint(1200, 2000)
     viewer = EnvInteractor()
