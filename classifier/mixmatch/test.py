@@ -5,7 +5,7 @@ import numpy as np
 from matplotlib import pyplot as plt
 
 clf = StateClassifier()
-clf.load_state_dict(torch.load('save_classifier.pkl', map_location='cpu'))
+clf.load_state_dict(torch.load('best_model.pkl', map_location='cpu'))
 
 for i in range(50, 4000):
     image = np.load('../crowdsource_data/unlabeled_data/{}.npz'.format(i))['image']

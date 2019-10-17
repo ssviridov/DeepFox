@@ -22,6 +22,7 @@ from model import StateClassifier
 from util import Augmentation, atomic_save, mirror_obs
 from sklearn.model_selection import train_test_split
 from tqdm import trange
+from tensorboardX import SummaryWriter
 
 
 LR = 1e-4
@@ -34,6 +35,8 @@ TEMPERATURE = 0.5
 
 
 def main():
+    writer = SummaryWriter('logs')
+
     model = StateClassifier()
     if os.path.exists('save_classifier.pkl'):
         model.load_state_dict(torch.load('save_classifier.pkl'))
@@ -49,14 +52,18 @@ def main():
                                  *labeled_data(thread_pool, model, train),
                                  *unlabeled_data(thread_pool, model, recordings))
             print('step %d: test=%f mixmatch=%f' % (i, test_loss, loss.item()))
+            writer.add_scalar('test_loss', test_loss, i)
+            writer.add_scalar('mixmatch', loss.item(), i)
         else:
             loss = classification_loss(thread_pool, model, train)
             print('step %d: test=%f train=%f' % (i, test_loss, loss.item()))
+            writer.add_scalar('test_loss', test_loss, i)
+            writer.add_scalar('mixmatch', loss.item(), i)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         if not i % 100:
-            atomic_save(model.state_dict(), 'save_classifier.pkl')
+            atomic_save(model.state_dict(), 'save_classifier_{}_test_loss{}.pkl'.format(i, test_loss))
 
 
 def load_labeled_images():
