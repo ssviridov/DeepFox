@@ -9,8 +9,8 @@ from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator, ListSample
 import cv2
 
 aai_path = "aai_resources/env/AnimalAI"
-config_path = "aai_resources/new_configs/" #"aai_resources/test_configs/"
-config_path = config_path + "mazes" #/5_walls/5_walls_gold.yaml"
+config_path = "aai_resources/bio_configs/" #"aai_resources/test_configs/"
+config_path = config_path + "Water.yaml" #/5_walls/5_walls_gold.yaml"
 
 
 def get_config_name(env_aai):
@@ -204,12 +204,13 @@ def record_episode(seed, env, viewer):
         avg_speed[:] = coef * avg_speed + 0.001*obs['speed']
         speed_reward = np.linalg.norm(avg_speed)
         total_steps[0] += 1
+        true_r = rew - info['grid_oracle']['r']
 
         time.sleep(0.025)
         color = obs['image'][42,42]
-        print("\rstep#{} speed_r={:0.4f} angle={:.1f}, pos=({:.2f}, {:.2f}, {:.2f}),"
+        print("\rstep#{} R={:0.4f} angle={:.1f}, pos=({:.2f}, {:.2f}, {:.2f}),"
               " speed=({:.2f}, {:.2f}, {:.2f}), n_visited={}, expl_r={}, pixel[42,42]: {}".format(
-            total_steps[0], speed_reward,
+            total_steps[0], true_r ,
             (angle+1.)*180, x*70,z*70,y*70, dx*10,dz*10,dy*10,
             info['grid_oracle']['n_visited'],
             info['grid_oracle']['r'], color.astype(int) # rew
