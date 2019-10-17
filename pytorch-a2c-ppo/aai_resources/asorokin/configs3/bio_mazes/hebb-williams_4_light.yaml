@@ -1,0 +1,78 @@
+!ArenaConfig
+arenas:
+  0: !Arena
+    t: 250
+    blackouts: [-20]
+    items:
+    - !Item
+      name: Wall
+      positions:
+        - !Vector3 {x: 7, y: 0, z: 12.5}
+      sizes:
+        - !Vector3 {x: 25, y: 5, z: 0.5}
+      colors:
+        - !RGB {r: 153, g: 153, b: 153}
+      rotations: [90]
+
+    - !Item
+      name: Wall
+      positions:
+        - !Vector3 {x: 7, y: 0, z: 35}
+      sizes:
+        - !Vector3 {x: 10, y: 5, z: 0.5}
+      colors:
+        - !RGB {r: 153, g: 153, b: 153}
+      rotations: [90]
+
+    - !Item
+      name: Wall
+      positions:
+        - !Vector3 {x: 17.25, y: 0, z: 30.25}
+      sizes:
+        - !Vector3 {x: 20, y: 5, z: 0.5}
+      colors:
+        - !RGB {r: 153, g: 153, b: 153}
+      rotations: [0]
+
+    - !Item
+      name: Wall
+      positions:
+        - !Vector3 {x: 12.25, y: 0, z: 24.75}
+      sizes:
+        - !Vector3 {x: 10, y: 5, z: 0.5}
+      colors:
+        - !RGB {r: 153, g: 153, b: 153}
+      rotations: [0]
+
+    - !Item
+      name: Wall
+      positions:
+        - !Vector3 {x: 20.25, y: 0, z: 20.75}
+      sizes:
+        - !Vector3 {x: 10, y: 5, z: 0.5}
+      colors:
+        - !RGB {r: 153, g: 153, b: 153}
+      rotations: [0]
+
+    - !Item
+      name: Wall
+      positions:
+        - !Vector3 {x: 28.25, y: 0, z: 16.75}
+      sizes:
+        - !Vector3 {x: 10, y: 5, z: 0.5}
+      colors:
+        - !RGB {r: 153, g: 153, b: 153}
+      rotations: [0]
+
+    - !Item
+      name: GoodGoal
+      positions:
+        - !Vector3 {x: 38, y: 0, z: 38}
+
+    - !Item
+      name: Agent
+      positions:
+        - !Vector3 {x: 2, y: 0, z: 2}
+      rotations: [45]
+
+
