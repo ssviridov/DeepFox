@@ -17,7 +17,7 @@ from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from a2c_ppo_acktr.envs import VecPyTorch, VecPyTorchFrameStack, VecPyTorchFrameStackDictObs, VecHistoryFrameStack, ShmemVecEnv
 from .aai_config_generator import SingleConfigGenerator
 from .aai_env_fixed import UnityEnvHeadless
-from .preprocessors import GridOracle, GridOracleWithAngles, MetaObs
+from .preprocessors import GridOracle, GridOracleWithAngles, MetaObs, ObjectClassifier
 import threading
 import torch
 
@@ -262,10 +262,10 @@ def make_env_aai(env_path, config_generator, rank,
 def make_vec_envs_aai(
         env_path, config_generator, seed, num_processes,
         device, num_frame_stack=None, headless=False,
-        grid_oracle_kwargs=None, **env_kwargs):
+        grid_oracle_kwargs=None, classifier_kwargs=None, **env_kwargs):
 
     envs = [make_env_aai(env_path, config_generator, i+seed,
-                         headless, grid_oracle_kwargs, **env_kwargs)
+                         headless, grid_oracle_kwargs,  **env_kwargs)
             for i in range(num_processes)]
 
     if len(envs) > 2:
@@ -284,6 +284,9 @@ def make_vec_envs_aai(
 
     #obs = envs.reset()
     envs = VecPyTorch(envs, device)
+
+    if classifier_kwargs:
+        envs = ObjectClassifier(**classifier_kwargs).wrap_env(envs)
 
     if num_frame_stack is not None:
         #VecHistoryFrameStack - stacks all observations in dict along a new dimention

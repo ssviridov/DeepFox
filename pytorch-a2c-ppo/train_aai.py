@@ -168,7 +168,8 @@ def main():
         torch.backends.cudnn.deterministic = True
 
     torch.set_num_threads(1)
-    device = torch.device("cuda:{}".format(args.device) if args.cuda else "cpu")
+    device_str = "cuda:{}".format(args.device) if args.cuda else "cpu"
+    device = torch.device(device_str)
 
     #Create Environment:
     gen_config = HierarchicalSampler.create_from_dir(args.config_dir)
@@ -182,12 +183,20 @@ def main():
         cell_side=args.oracle_cell_side,
         # trace_decay=0.992, # randomly
     )
+    args.classifier_args = None
+    if 'objects' in args.extra_obs:
+        args.classifier_args = dict(
+            model_path=args.clf_path,
+            threshold=args.clf_threshold,
+            device='cpu' if args.clf_cpu else device_str
+        )
 
     envs = make_vec_envs_aai(
         args.env_path, gen_config, args.seed, args.num_processes,
         device, num_frame_stack=args.frame_stack,
         headless=args.headless,
         grid_oracle_kwargs=args.real_oracle_args,
+        classifier_kwargs=args.classifier_args,
         image_only=len(args.extra_obs) == 0,
         docker_training=args.docker_training,
         reduced_actions=args.reduced_actions,

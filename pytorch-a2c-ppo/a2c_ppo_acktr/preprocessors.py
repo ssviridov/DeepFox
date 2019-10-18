@@ -3,6 +3,8 @@ import numpy as np
 from gym import spaces
 #import typing
 #from typing import Union, Tuple
+from .object_classifier import StateClassifier
+import torch as th
 
 class Preprocessor(object):
 
@@ -32,6 +34,11 @@ class Preprocessor(object):
 class PreprocessingWrapper(gym.Wrapper):
 
     def __init__(self, env, preprocessor):
+        if not hasattr(env, 'reward_range'):
+            env.reward_range = None
+        if not hasattr(env, 'metadata'):
+            env.metadata = None
+
         super(PreprocessingWrapper, self).__init__(env)
 
         obs_sp, act_sp, r_range, metadata = preprocessor.init(env)
@@ -50,6 +57,18 @@ class PreprocessingWrapper(gym.Wrapper):
     def step(self, action):
         obs, r, done, info = self.env.step(action)
         obs, r, done, info = self.preprocessor.step(action, obs, r, done, info)
+        return obs, r, done, info
+
+    @th.no_grad()
+    def step_async(self, actions):
+        #VecEnv and it's subclasses may use step_async and step_wait instead of step
+        self.prev_action = actions
+        self.env.step_async(actions)
+
+    @th.no_grad()
+    def step_wait(self):
+        obs, r, done, info = self.env.step_wait()
+        obs, r, done, info = self.preprocessor.step(self.prev_action, obs, r, done, info)
         return obs, r, done, info
 
 
@@ -419,3 +438,77 @@ class MetaObs(Preprocessor):
         action_repr[first_id] = 1.
         action_repr[second_id+3] = 1.
         return action_repr
+
+
+class ObjectClassifier(Preprocessor):
+    """
+    Multi-label object classifier.
+    After ObjectClassifier an observation dict returned by environment will store
+    probabilities of each object type present on the image.
+    In case you are using frame stack it looks at the last 3 channels
+     in the image tensor (the newest frame in the stack).
+    """
+    def __init__(
+        self,
+        model_path='aai_resources/classifier/best_model.pkl',
+        threshold=None,
+        device='cpu'
+    ):
+        self.threshold = threshold
+        self.clf = StateClassifier()
+        self.clf.load_state_dict(th.load(model_path, map_location=device))
+        self.clf = self.clf.to(device)
+        self.clf.eval()
+
+        self.num_labels = self.clf.NUM_LABELS
+        self.labels = self.clf.LABELS
+        self.device = device
+
+    def init(self, env):
+        assert isinstance(env.observation_space, spaces.Dict), "Works only with dict obs space!"
+        #update obs space with new observations:
+        space = dict(env.observation_space.spaces)
+
+        shape = (self.clf.NUM_LABELS,)
+        space['objects'] = spaces.Box(0., 1., shape=shape, dtype=np.float32)
+
+        obs_space = spaces.Dict(space)
+
+        return (obs_space,
+                env.action_space,
+                env.reward_range,
+                env.metadata)
+
+    def reset(self, obs):
+        # during evaluation first reset is empty for preprocessors:
+        if 'image' in obs:
+            return self.add_objects_to_obs(obs)
+
+        return obs
+
+    def step(self,  act, obs, r, done, info):
+        obs = self.add_objects_to_obs(obs)
+        return obs, r, done, info
+
+    @th.no_grad()
+    def add_objects_to_obs(self, obs):
+        img = obs['image']
+
+        *batch_size, C, H, W = img.shape
+        if not batch_size:
+            img = th.as_tensor(img, device=self.device).unsqueeze(0)
+        else:
+            img = img.to(self.device)
+
+        results = th.sigmoid(self.clf(img[:,-3:]))
+
+        if self.threshold:
+            results = (results > self.threshold).to(th.float32)
+
+        if not batch_size:
+            results = results.squeeze(0).cpu().numpy()
+        else:
+            results = results.to(obs['image'].device)
+
+        obs['objects'] = results
+        return obs

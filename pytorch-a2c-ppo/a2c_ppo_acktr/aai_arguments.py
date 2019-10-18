@@ -75,6 +75,21 @@ def get_args():
              " otherwise it is a penalty given to the agent when it stays in the visited"
              " cell for more than one step. (default: -1./100)"
         )
+    #OBJECT-CLASSIFIER arguments:
+    #these arguments count only if you have objects in --extra-obs
+    parser.add_argument(
+        '-clp', '--clf-path', default='aai_resources/classifier/best_model.pkl',
+        type=str, help='Path to weights of an object classifier'
+    )
+    parser.add_argument(
+        '-clt','--clf-threshold', default=None, type=float,
+        help="If None classifier returns class probs,"
+             " otherwise returns (probs > threshold).float() (default: None)",
+    )
+    parser.add_argument(
+        '-clg','--clf-cpu', default=False, action='store_true',
+        help='If specified classifier will be processed on cpu'
+    )
 
     #PPO/A2C arguments:
     parser.add_argument(

@@ -1,5 +1,5 @@
 import time
-
+import argparse
 from PIL import Image
 from gym.envs.classic_control.rendering import SimpleImageViewer
 import numpy as np
@@ -8,10 +8,11 @@ from a2c_ppo_acktr.aai_wrapper import make_env_aai
 from a2c_ppo_acktr.aai_config_generator import SingleConfigGenerator, ListSampler, \
     FixedTimeGenerator, RandomizedGenerator
 import cv2
+from a2c_ppo_acktr.preprocessors import ObjectClassifier
 
 aai_path = "aai_resources/env/AnimalAI"
 config_path = "aai_resources/asorokin/" #"aai_resources/test_configs/"
-config_path = config_path + "configs3/bad_zones/red_zone/Water_stay_random.yaml" #/5_walls/5_walls_gold.yaml"
+config_path = config_path + "configs3/" #/5_walls/5_walls_gold.yaml"
 
 
 def get_config_name(env_aai):
@@ -116,13 +117,15 @@ class EnvInteractor(SimpleImageViewer):
             last_time = time.time()
 
 
-def main():
+def main(num_repeat, info_mode):
     if config_path.endswith("yaml"):
         gen_config = SingleConfigGenerator.from_file(config_path)
-        num_episodes = 5
+        num_configs = 1
     else:
         gen_config = ListSampler.create_from_dir(config_path)
-        num_episodes = len(gen_config.configs)
+        num_configs = len(gen_config.configs)
+
+    num_episodes = num_repeat*num_configs
 
     gen_config = FixedTimeGenerator(gen_config, 1500)
     #gen_config = RandomizedGenerator(gen_config, 0.9, 0.3)
@@ -139,10 +142,13 @@ def main():
             num_angles=3,
             cell_side=2,
         ),
-        channel_first=False,
+        channel_first=True,
         image_only=False
     )
     env = make()
+    if info_mode == 'classifier':
+        env = ObjectClassifier().wrap_env(env)
+
     for ep in range(num_episodes):
         run_episode(ep, env, viewer)
         # episodes are reset automatically
@@ -201,32 +207,21 @@ def record_episode(seed, env, viewer):
 
         obs, rew, done, info = env.step(action) #actions[total_steps[0]])
 
-        x,y,z = obs['pos']
-        dx,dy,dz = obs['speed']
-        angle = obs['angle'][0]
-        
         reward_log.append(rew)
-        avg_speed[:] = coef * avg_speed + 0.001*obs['speed']
-        speed_reward = np.linalg.norm(avg_speed)
         total_steps[0] += 1
 
         time.sleep(0.025)
-        color = obs['image'][42,42]
+
         curr_blackout[0] = (curr_blackout[0]+1)*(obs['image'].max() <= 0.)
         max_blackout[0] = max(curr_blackout[0], max_blackout[0])
 
-        print("\rstep#{} speed_r={:0.4f} angle={:.1f}, pos=({:.2f}, {:.2f}, {:.2f}),"
-              " speed=({:.2f}, {:.2f}, {:.2f}), n_visited={}, expl_r={}, pixel[42,42]: {}".format(
-            total_steps[0], speed_reward,
-            (angle+1.)*180, x*70,z*70,y*70, dx*10,dz*10,dy*10,
-            info['grid_oracle']['n_visited'],
-            info['grid_oracle']['r'], color.astype(int) # rew
-        ), end="")
+        if 'objects' in obs:
+            print_classifier_info(total_steps[0], obs, info)
+        else:
+            print_default_info(total_steps[0], obs, info)
 
-        #if info['grid_oracle']['r'] > 0.0:
-        #    print("\nr={}".format(info['grid_oracle']['r']))
-        #img = color_filter(obs['image'], [153.,153.,153.])
-        img = concat_images(obs['image'], obs['visited'])
+        img = obs['image'].transpose(1, 2, 0)
+        img = concat_images(img, obs['visited'])
         #print("VISITED:\n", obs['visited'][0])
         #map_window.imshow(map2img(obs['visited']))
         if done:
@@ -234,26 +229,57 @@ def record_episode(seed, env, viewer):
             return None
 
         return img
-   # #config = remove_cardbox2(env.config_generator.next_config())
-    #ob0 = env.reset(config).astype(np.uint8)
-    #config = env.config_generator.next_config()
-    #ob1 = env.reset(config).astype(np.uint8)
-    #masked = (ob1 != ob0).astype(np.uint8)*ob1
-    #viewer._masked_img = masked
+
+
     viewer.run_loop(step)
 
     #viewer.run_loop(step)
 
+def print_default_info(step, obs, info, ):
+    x, y, z = obs['pos']
+    dx, dy, dz = obs['speed']
+    angle = obs['angle'][0]
+    color = obs['image'][42, 42]
 
-import copy
-def remove_cardbox2(config_dict):
-    config = copy.deepcopy(config_dict['config'])
-    cardboxes = config.arenas[0].items[2]
-    cardboxes.positions.pop()
-    cardboxes.rotations.pop()
-    cardboxes.sizes.pop()
-    return {"config":config, "config_name":"without_cardbox"}
+    print("\rstep#{} angle={:.1f}, pos=({:.2f}, {:.2f}, {:.2f}),"
+          " speed=({:.2f}, {:.2f}, {:.2f}), n_visited={}, expl_r={}, pixel[42,42]: {}".format(
+        step, (angle + 1.) * 180, x * 70, z * 70, y * 70,
+        dx * 10, dz * 10, dy * 10,
+        info['grid_oracle']['n_visited'],
+        info['grid_oracle']['r'], color.astype(int)  # rew
+    ), end="")
+
+
+LABELS = (
+        'Nothing', 'Wall', 'WallTransparent', 'Ramp',
+        'CylinderTunnel', 'CylinderTunnelTransparent',
+        'Cardbox', 'UObject/LObject', 'GoodGoal', 'BadGoal',
+        'GoodGoadMulti', 'DeathZone', 'HotZone'
+    )
+
+def print_classifier_info(step, obs, info):
+    probs = obs['objects']
+    print(
+        "\rSTEP#{} N={:.2f}, W={:.2f}, WT={:.2f}, R={:.2f}, " 
+        "CT={:.2f}, CTT={:.2f}, Cb={:.2f}, U/L={:.2f}, GG={:.2f} "
+        "BG={:.2f}, GGM={:.2f}, DZ={:.2f}, HZ={:.2f}".format(
+            step, *probs,
+    ), end="")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-n', '--num-repeat',
+        type=int, default=1,
+        help='Number of times we play each config in the env-path folder'
+    )
+
+    parser.add_argument(
+        '-i','--info', type=str,
+        default='default', choices=['default', 'classifier'],
+        help='outputs default info at each step or info from object classifier'
+    )
+    args = parser.parse_args()
+
+    main(args.num_repeat, args.info)
 
