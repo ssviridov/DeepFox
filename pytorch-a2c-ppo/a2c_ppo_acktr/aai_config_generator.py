@@ -264,3 +264,5 @@ class RandomizedGenerator(ConfigGeneratorWrapper):
                                 #print('{}#{}: changed RGB{} to RGB{}'.format(item.name, c_id, color, new_color))
 
         return config_dict
+
+

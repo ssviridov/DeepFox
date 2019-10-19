@@ -32,7 +32,7 @@ def rotate(vec, angle):
 
 class AnimalAIWrapper(gym.Env):
 
-    ENV_RELOAD_PERIOD = 2400 #total update period( with num_processes==16) will be in range [2M, 6M] steps
+    ENV_RELOAD_PERIOD = 1200 #2400 #total update period( with num_processes==16) will be in range [2M, 6M] steps
 
     def __init__(self, env_path, rank, config_generator,
                  action_repeat=1, docker_training=False,

@@ -17,7 +17,7 @@ for i in range(50, 4000):
     idx = np.argsort(-probs)
 
     for i in idx:
-        print(LABELS[i], probs[i])
+        print("{}: {:.2f}".format(LABELS[i], probs[i]))
     print('=' * 100)
 
     plt.imshow(image)

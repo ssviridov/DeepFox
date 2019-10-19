@@ -12,7 +12,7 @@ from a2c_ppo_acktr.preprocessors import ObjectClassifier
 
 aai_path = "aai_resources/env/AnimalAI"
 config_path = "aai_resources/asorokin/" #"aai_resources/test_configs/"
-config_path = config_path + "configs3/" #/5_walls/5_walls_gold.yaml"
+config_path = config_path + "grid_mazes/4x4" #/5_walls/5_walls_gold.yaml"
 
 
 def get_config_name(env_aai):
@@ -239,7 +239,7 @@ def print_default_info(step, obs, info, ):
     x, y, z = obs['pos']
     dx, dy, dz = obs['speed']
     angle = obs['angle'][0]
-    color = obs['image'][42, 42]
+    color = obs['image'][:,42, 42]
 
     print("\rstep#{} angle={:.1f}, pos=({:.2f}, {:.2f}, {:.2f}),"
           " speed=({:.2f}, {:.2f}, {:.2f}), n_visited={}, expl_r={}, pixel[42,42]: {}".format(
