@@ -13,7 +13,7 @@ from a2c_ppo_acktr.aai_models import AAIPolicy, ImageVecMap
 
 from a2c_ppo_acktr.aai_storage import create_storage
 
-from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator, HierarchicalSampler
+import a2c_ppo_acktr.aai_config_generator as configs
 import json
 from tensorboardX import SummaryWriter
 
@@ -138,14 +138,14 @@ def make_model_kwargs(args):
 
     elif args.policy.startswith('cached'):
         body_kwargs['memory_len']= getattr(args, 'memory_len', 20)
-        body_kwargs['attention_heads'] = getattr(args, 'attention_heads', 3) #ignored with cached_tc
+        body_kwargs['attention_heads'] = getattr(args, 'attention_heads', 9) #ignored with cached_tc
         # body_kwargs['residual']=True
         # body_kwargs['layer_norm']=True
 
     model_kwargs = dict(
         body_type=args.policy,
         extra_obs=args.extra_obs,
-        head_kwargs=dict(hidden_sizes=(512,)),  # defaults: (hidden_sizes=tuple(), nl='relu')
+        head_kwargs=dict(hidden_sizes=(512,)), #nl='tanh'),  # defaults: (hidden_sizes=tuple(), nl='relu')
         body_kwargs=body_kwargs,
         map_dim=384,  # 'extra_encoder_dim':384,
         image_dim=384,
@@ -171,8 +171,12 @@ def main():
     device_str = "cuda:{}".format(args.device) if args.cuda else "cpu"
     device = torch.device(device_str)
 
-    #Create Environment:
-    gen_config = HierarchicalSampler.create_from_dir(args.config_dir)
+    #Load config files and determine a method of config sampling:
+    gen_config = configs.HierarchicalSampler.create_from_dir(args.config_dir)
+
+    gen_config = configs.RandomizedGenerator.create(
+        gen_config, args.rnd_blackout, args.rnd_object, args.rnd_color
+    )
     #gen_config = SingleConfigGenerator.from_file(
     #    "aai_resources/new_configs/mazes/chess_walls.yaml")
 

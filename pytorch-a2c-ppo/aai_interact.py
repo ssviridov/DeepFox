@@ -11,8 +11,8 @@ import cv2
 from a2c_ppo_acktr.preprocessors import ObjectClassifier
 
 aai_path = "aai_resources/env/AnimalAI"
-config_path = "aai_resources/asorokin/" #"aai_resources/test_configs/"
-config_path = config_path + "grid_mazes/4x4" #/5_walls/5_walls_gold.yaml"
+config_path = "aai_resources/configs2/" #"aai_resources/test_configs/"
+config_path = config_path + "exampleConfig.yaml" #/5_walls/5_walls_gold.yaml"
 
 
 def get_config_name(env_aai):
@@ -127,8 +127,8 @@ def main(num_repeat, info_mode):
 
     num_episodes = num_repeat*num_configs
 
+    #gen_config = RandomizedGenerator.create(gen_config, 0.5, 0.5, 0.5)
     gen_config = FixedTimeGenerator(gen_config, 1500)
-    #gen_config = RandomizedGenerator(gen_config, 0.9, 0.3)
 
     rank = np.random.randint(1200, 2000)
     viewer = EnvInteractor()

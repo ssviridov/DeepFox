@@ -223,7 +223,14 @@ class RandomizedGenerator(ConfigGeneratorWrapper):
 
     PAINTABLE_OBJECTS = {'Wall', 'CylinderTunnel', "Ramp"}
 
-    BLACKOUTS = [[-20], [-40]]
+    BLACKOUTS = [[-10], [-20], [-30], [-40]]
+
+    @staticmethod
+    def create(config_generator, blackout_prob, object_change_prob, color_change_prob):
+        if blackout_prob>0. or object_change_prob>0. or color_change_prob>0.:
+            return RandomizedGenerator(config_generator, blackout_prob, object_change_prob, color_change_prob)
+        else: #if you change nothing why bother?
+            return config_generator
 
     def __init__(self, config_generator, blackout_prob=0.1, object_change_prob=0.2, color_change_prob=0.2):
         super(RandomizedGenerator, self).__init__(config_generator)
@@ -233,27 +240,37 @@ class RandomizedGenerator(ConfigGeneratorWrapper):
 
     def process_config(self, config_dict):
         config = config_dict['config']
-        print('Randomizing[ocp={:0.2f}, ccp={:0.2f}] {}'.format(self.object_change_prob, self.color_change_prob, config_dict['config_name']))
+        #print('Randomizing[ocp={:0.2f}, ccp={:0.2f}] {}'.format(self.object_change_prob, self.color_change_prob, config_dict['config_name']))
 
 
         for k, arena in config.arenas.items():
-            if not len(arena.blackouts):
-                arena.blackouts = [-100] #[-20]
+            if not len(arena.blackouts) and arena.t <= 500:
+                add_blackout = self.blackout_prob > np.random.random()
+
+                if add_blackout:
+                    blackout_id =np.random.choice(len(self.BLACKOUTS))
+                    arena.blackouts = self.BLACKOUTS[blackout_id]
+                    arena.t = arena.t*2
 
             for it_id, item in enumerate(arena.items):
                 change_obj = self.object_change_prob > np.random.random()
-                print('Try to change {}: {}'.format(item.name, change_obj))
+                #print('Try to change {}: {}'.format(item.name, change_obj))
                 if change_obj:
                     for group in self.PERMUTABLE_OBJECTS:
                         if item.name in group:
                             new_name = np.random.choice(group)
-                            print('Changing {} with {}'.format(item.name, new_name))
+                            #print('Changing {} with {}'.format(item.name, new_name))
                             if new_name != item.name:
                                 arena.items[it_id] = Item(new_name, item.positions, item.rotations, item.sizes, item.colors)
                                 item = arena.items[it_id]
-                                print('Object {} was changed to {}'.format(item.name, new_name))
+                                #print('Object {} was changed to {}'.format(item.name, new_name))
                             break
                 if item.name in self.PAINTABLE_OBJECTS:
+
+                    n_colors = len(item.colors) #colors specified
+                    n_items = max(n_colors,len(item.positions), len(item.sizes)) #n different items
+                    for i in range(n_items-n_colors): item.colors.append(RGB(-1,-1,-1))
+
                     for c_id, rgb in enumerate(item.colors):
                         if self.color_change_prob > np.random.random():
                             color = rgb.r, rgb.g, rgb.b
