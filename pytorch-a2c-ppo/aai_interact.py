@@ -127,8 +127,8 @@ def main(num_repeat, info_mode):
 
     num_episodes = num_repeat*num_configs
 
+    #gen_config = RandomizedGenerator.create(gen_config, 0.5, 0.5, 0.5)
     gen_config = FixedTimeGenerator(gen_config, 1500)
-    #gen_config = RandomizedGenerator(gen_config, 0.9, 0.3)
 
     rank = np.random.randint(1200, 2000)
     viewer = EnvInteractor()

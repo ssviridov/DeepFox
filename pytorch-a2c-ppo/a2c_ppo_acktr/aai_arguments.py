@@ -75,6 +75,7 @@ def get_args():
              " otherwise it is a penalty given to the agent when it stays in the visited"
              " cell for more than one step. (default: -1./100)"
         )
+
     #OBJECT-CLASSIFIER arguments:
     #these arguments count only if you have objects in --extra-obs
     parser.add_argument(
@@ -91,6 +92,19 @@ def get_args():
         help='If specified classifier will be processed on cpu'
     )
 
+    #CONFIG-RANDOMIZATION arguments:
+    parser.add_argument(
+        '--rnd-blackout', default=0., type=float,
+        help='Chance of adding blackout to a config without one.'
+    )
+    parser.add_argument(
+        '--rnd-color', default=0., type=float,
+        help='Change of changing object color'
+    )
+    parser.add_argument(
+        '--rnd-object', default=0., type=float,
+        help='Change of changing object type'
+    )
     #PPO/A2C arguments:
     parser.add_argument(
         '--algo', default='a2c', help='algorithm to use: a2c | ppo | acktr')
