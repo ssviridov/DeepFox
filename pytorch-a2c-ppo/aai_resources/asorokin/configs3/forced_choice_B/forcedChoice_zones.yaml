@@ -20,23 +20,31 @@ arenas:
       - !Vector3 {x: 17.5, y: 5, z: .1}
       colors:
       - !RGB {r: 0, g: 0, b: 255}
-      - !RGB {r: 200, g: 200, b: 200}
-      - !RGB {r: 200, g: 200, b: 200}
-      - !RGB {r: 200, g: 200, b: 200}
-      - !RGB {r: 200, g: 200, b: 200}
+      - !RGB {r: 153, g: 153, b: 153}
+      - !RGB {r: 153, g: 153, b: 153}
+      - !RGB {r: 153, g: 153, b: 153}
+      - !RGB {r: 153, g: 153, b: 153}
+
     - !Item
-      name: Agent
-      positions: 
-      - !Vector3 {x: 20, y: .5, z: 20}
+      name: DeathZone
+      positions:
+      - !Vector3 {x: 20, y: 0, z: 30}
+      sizes:
+      - !Vector3 {x: 40, y: 0, z: 20}
+      rotations: [0]
+    - !Item
+      name: GoodGoal
+      positions:
+      - !Vector3 {x: -1, y: 0, z: 30}
+      sizes:
+      - !Vector3 {x: 1.5, y: 1.5, z: 1.5}
     - !Item
       name: GoodGoal
       positions: 
-      - !Vector3 {x: 30, y: 0, z: 30}
+      - !Vector3 {x: -1, y: 0, z: 10}
       sizes:
-      - !Vector3 {x: 1, y: 1, z: 1}
+      - !Vector3 {x: 1.5, y: 1.5, z: 1.5}
     - !Item
-      name: BadGoal
-      positions: 
-      - !Vector3 {x: 10, y: 0, z: 30}
-      sizes:
-      - !Vector3 {x: 1, y: 1, z: 1}
+      name: Agent
+      positions:
+      - !Vector3 {x: 20, y: .5, z: 20}
