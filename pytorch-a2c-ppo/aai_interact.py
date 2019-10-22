@@ -12,7 +12,7 @@ from a2c_ppo_acktr.preprocessors import ObjectClassifier
 
 aai_path = "aai_resources/env/AnimalAI"
 config_path = "aai_resources/asorokin/" #"aai_resources/test_configs/"
-config_path = config_path + "grid_mazes/4x4" #/5_walls/5_walls_gold.yaml"
+config_path = config_path + "grid_mazes/5x5" #/5_walls/5_walls_gold.yaml"
 
 
 def get_config_name(env_aai):

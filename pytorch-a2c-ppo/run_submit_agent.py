@@ -6,7 +6,7 @@ DOCKER_CONFIG_PATH = '/aaio/data/sub_config.yaml'
 def create_env(seed=None):
 
     arena_config = ArenaConfig(
-        "aai_resources/default_configs/1-Food.yaml"
+        "aai_resources/default_configs2/1-food/food.yaml"
     )
 
     seed = seed if seed else rnd.randint(0, 1000)
@@ -47,8 +47,8 @@ if __name__ == "__main__":
     from agent import Agent
     from a2c_ppo_acktr.aai_config_generator import ListSampler, SingleConfigGenerator
     #gen_config = ListSampler.create_from_dir("aai_resources/default_configs/")
-    gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs/1-Food.yaml")
-    agent = Agent('submission/data/pretrained/mixed-configs/sub_config.yaml')
+    gen_config = SingleConfigGenerator.from_file("aai_resources/default_configs2/1-food/food.yaml")
+    agent = Agent('submission/data/pretrained/config3-150M/sub_config.yaml')
     env = create_env(3)
 
     #config = gen_config.next_config()

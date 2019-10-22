@@ -11,7 +11,7 @@ import itertools as it
 import numpy as np
 from a2c_ppo_acktr.preprocessors import GridOracle, GridOracleWithAngles, MetaObs
 #change this path to specify a model you want to submit:
-DOCKER_CONFIG_PATH = '/aaio/data/pretrained/mixed-configs/sub_config.yaml'
+DOCKER_CONFIG_PATH = '/aaio/data/pretrained/config3-150M/sub_config.yaml'
 
 
 class ActionAdapter(object):
@@ -280,8 +280,7 @@ class Agent(object):
     def _start_episode(self, batch_size=1):
 
         self.rnn_state = th.zeros(
-            batch_size,
-            self.model.internal_state_shape,
+            batch_size, *self.model.internal_state_shape,
             device=self.device
         )
         self.masks = th.zeros(batch_size,1, device=self.device)

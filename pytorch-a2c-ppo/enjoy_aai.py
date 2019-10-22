@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import json
+import string
 
 from itertools import count
 import numpy as np
@@ -24,8 +25,7 @@ def load_args(folder, file_name='train_args.json'):
 
 def get_config_name(venv_aai):
     name = env.venv.envs[0].unwrapped.config_name[:-5]#no .yaml suffix
-    if name[-1].isdigit():
-        return name[:-1] #different instances of one env type have a digit at the end
+    name = name.rstrip(string.digits)
     return name
 
 parser = argparse.ArgumentParser(description='RL')
@@ -119,7 +119,7 @@ num_episodes = args.num_repeat*num_configs
 print("Play {} configs {} times".format(num_configs, args.num_repeat))
 
 for episode in range(num_episodes):
-    rnn_state = torch.zeros(1, actor_critic.recurrent_hidden_state_size).to(device)
+    rnn_state = torch.zeros(1, *actor_critic.internal_state_shape).to(device)
 
     masks = torch.zeros(1, 1).to(device)
     obs = env.reset()
