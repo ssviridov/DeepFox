@@ -226,7 +226,7 @@ def get_args():
         help='compute returns taking into account time limits')
     parser.add_argument(
         '-pol','--policy',
-        choices=('rnn', 'ff', 'cached_mha', 'cached_tc'),
+        choices=('rnn', 'ff', 'cached_mha', 'cached_tc', 'cached_fc'), #cached_fc is a fc layer applied over
         default="ff",
         help='Choose policy: feedforward, recurrent, or a policy with temporal attention (default: ff)'
     )

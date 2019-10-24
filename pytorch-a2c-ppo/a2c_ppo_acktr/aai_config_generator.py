@@ -159,6 +159,8 @@ class HierarchicalSampler(ConfigGenerator):
             return {'config':choice, "config_name":name}
 
 
+class SimpleCurricu
+
 def deep_config_update(target, source):
     """Really copies everyhing from source config to target config"""
 
@@ -281,5 +283,6 @@ class RandomizedGenerator(ConfigGeneratorWrapper):
                                 #print('{}#{}: changed RGB{} to RGB{}'.format(item.name, c_id, color, new_color))
 
         return config_dict
+
 
 

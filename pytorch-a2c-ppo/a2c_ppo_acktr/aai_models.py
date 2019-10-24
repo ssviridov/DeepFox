@@ -8,7 +8,8 @@ from torch import nn
 import torch as th
 from a2c_ppo_acktr.utils import init, default_init, conv_output_shape
 import numpy as np
-from .aai_layers import NaiveHistoryAttention, TemporalAttentionPooling, CachedAttention
+from .aai_layers import NaiveHistoryAttention, TemporalAttentionPooling,\
+    CachedAttention, TemporalLinearLayer
 import torch.nn.functional as F
 import logging
 
@@ -79,6 +80,7 @@ class AAIBody(nn.Module):
         self._sequential = True
         self._hidden_size = kwargs.pop('hidden_size', input_size)
 
+
         self.gru = nn.GRU(input_size, self._hidden_size)
 
         for name, param in self.gru.named_parameters():
@@ -91,8 +93,8 @@ class AAIBody(nn.Module):
         self._body_forward = self._forward_gru
 
     def _init_attn(self, input_size, kwargs):
-
         self._sequential = True
+        self._memory_len = kwargs.pop('memory_len', 10)
 
         if self._body_type.endswith('tc'):
             attn = TemporalAttentionPooling(input_size)
@@ -103,11 +105,14 @@ class AAIBody(nn.Module):
             layer_norm = kwargs.pop('layer_norm', False)
             attn = NaiveHistoryAttention(input_size, attn_heads,residual,layer_norm)
 
+        elif self._body_type.endswith('fc'):
+            assert self._memory_len > 1, 'Why do you need this?'
+            hidden_size = kwargs.get('hidden_size', 256)
+            attn = TemporalLinearLayer(input_size, self._memory_len, hidden_size)
         else:
             raise NotImplementedError("{}? What is that?".format(self._body_type))
 
         self._hidden_size = kwargs.pop('hidden_size', attn.features_out)
-        self._memory_len = kwargs.pop('memory_len', 10)
         self.attention_layer = CachedAttention(attn, self._memory_len)
 
         self._internal_state_shape = (self._memory_len, input_size)

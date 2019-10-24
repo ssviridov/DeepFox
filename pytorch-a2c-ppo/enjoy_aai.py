@@ -76,6 +76,10 @@ gen_config = ListSampler.create_from_dir(args.config_dir)
 train_args = load_args(os.path.dirname(args.model_path))
 
 image_only = len(train_args.get('extra_obs',[])) == 0
+classifier_args = train_args.get('classifier_args', None)
+if classifier_args:
+    classifier_args['device'] ='cpu'
+
 oracle_kwargs = train_args.get('real_oracle_args', None)
 if not oracle_kwargs:
     oracle_kwargs = dict(
@@ -95,6 +99,7 @@ env = make_vec_envs_aai(
     num_frame_stack=train_args.get('frame_stack', 1),
     headless=False,
     grid_oracle_kwargs=oracle_kwargs,
+    classifier_kwargs=classifier_args,
     image_only=image_only
 )
 

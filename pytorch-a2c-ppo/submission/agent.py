@@ -9,7 +9,8 @@ import json
 import torch as th
 import itertools as it
 import numpy as np
-from a2c_ppo_acktr.preprocessors import GridOracle, GridOracleWithAngles, MetaObs
+from a2c_ppo_acktr.preprocessors import \
+    GridOracle, GridOracleWithAngles, MetaObs, ObjectClassifier
 #change this path to specify a model you want to submit:
 DOCKER_CONFIG_PATH = '/aaio/data/pretrained/config3-150M/sub_config.yaml'
 
@@ -95,10 +96,13 @@ class ObservationAdapter(object):
 
     def to_torch(self, key, var, is_image=False):
         if is_image:
-            if self.unsqueeze:
-                var = var.transpose(2,0,1)  # (H,W,C)-> (C,H,W)
-            else:
-                var = var.transpose(0, 3,1,2) #(batch, H,W,C)-> (batch,C,H,W)
+            *batch_size, C,H,W = var.shape
+            if C == H: #if C == H: H,W,C
+                H,W,C = C,H,W #H,W,C ->
+                if not len(batch_size):
+                    var = var.transpose(2,0,1)  # (H,W,C)-> (C,H,W)
+                else:
+                    var = var.transpose(0, 3,1,2) #(batch, H,W,C)-> (batch,C,H,W)
             var *= 255.
         var = th.tensor(var, dtype=th.float32, device=self.device)
         if self.unsqueeze:
@@ -127,6 +131,11 @@ class ExtraObsAdapter(ObservationAdapter):
             raise NotImplementedError()
 
         self.preprocessors = [grid_oracle, MetaObs()]
+
+        clf_args = kwargs.pop("object_classifier", None)
+        if clf_args:
+            obj_clf = ObjectClassifier(**clf_args)
+            self.preprocessors.append(obj_clf)
 
         super(ExtraObsAdapter, self).__init__(*args, **kwargs)
 
@@ -167,7 +176,7 @@ class ExtraObsAdapter(ObservationAdapter):
         absolute_speed = self._rotate_XZ(speed, self.angle[0])
         self.pos[:] += absolute_speed
         obs = {
-            "image": img,
+            "image": img.transpose(2, 0, 1), # (H,W,C)-> (C,H,W)
             "speed": absolute_speed / 10.,  # (-21.,21.)/10. --> (-2.1,2.1)
             "angle": self.angle / 180 - 1.,  # (0., 360.)/180 -1. --> (-1.,1.)
             "pos": self.pos / 70.,  # (-700.,700.)/70. --> (-10.,10)
@@ -219,6 +228,7 @@ class Agent(object):
         self.model = data['model'] if isinstance(data, dict) else data[0]
 
         self.model.to(self.device)
+        self.model.eval()
         self.greedy = self.config['greedy_policy']
 
         self.rnn_state = None

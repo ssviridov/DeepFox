@@ -1,6 +1,7 @@
 import torch as th
 from torch import nn
 from collections import deque
+from . import utils
 
 def outer_init(layer: nn.Module) -> None:
     """
@@ -95,6 +96,33 @@ class NaiveHistoryAttention(nn.Module):
 
         return result #batch_size, 2*embedding dim
 
+
+class TemporalLinearLayer(nn.Module):
+
+    def __init__(self, features_in, memory_len, hidden_size=256):
+        super().__init__()
+        self.features_in = features_in
+        self.features_out = features_in + hidden_size
+
+        self.mlp = nn.Sequential(
+            utils.default_init(nn.Linear(memory_len*features_in, 512),'relu'),
+            nn.ReLU(),
+            utils.default_init(nn.Linear(512, hidden_size),'relu'),
+            nn.ReLU(),
+        )
+
+    def forward(self, curr_obs, memory_window):
+        """
+        :param features: [batch_size, history_len, feature_size]
+        :return:
+        """
+        x = memory_window
+        batch_size, history_len, feature_size = x.shape
+        x = x.view(batch_size, -1)
+        x = self.mlp(x)
+        result = th.cat([curr_obs, x], dim=-1)
+
+        return result
 
 class CachedAttention(nn.Module):
 
