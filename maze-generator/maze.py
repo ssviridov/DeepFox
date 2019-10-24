@@ -3,6 +3,8 @@ import random
 # Easy to read representation for each cardinal direction.
 N, S, W, E = ('n', 's', 'w', 'e')
 
+DIRECTIONS = [N,S,W,E]
+
 class Cell(object):
     """
     Class for each individual cell. Knows only its position and which walls are
@@ -248,6 +250,28 @@ class Maze(object):
         m = Maze(width, height)
         m.randomize()
         return m
+
+    def search_cells(self, acceptable_walls_patterns):
+        conds = [set(p) for p in acceptable_walls_patterns]
+        cells = []
+
+        for x in range(self.width):
+            for z in range(self.height):
+                if self[x, z].walls in conds:
+                    cells.append((x, z))
+
+        return cells
+
+    def no_corner_cells(self):
+        conditions = ("ns", "ew", 'n', "s", "e", "w")
+        return self.search_cells(conditions)
+
+    def one_wall_cells(self):
+        conditions = ('n', "s", "e", "w")
+        return self.search_cells(conditions)
+
+    def corridor_cells(self):
+        return self.search_cells(("ns", 'ew'))
 
 if __name__ == "__main__":
     print('hello it is Maze!')
