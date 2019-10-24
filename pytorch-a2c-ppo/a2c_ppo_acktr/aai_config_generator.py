@@ -159,7 +159,9 @@ class HierarchicalSampler(ConfigGenerator):
             return {'config':choice, "config_name":name}
 
 
-class SimpleCurricu
+class SimpleCurriculum(ConfigGenerator):
+    pass
+
 
 def deep_config_update(target, source):
     """Really copies everyhing from source config to target config"""
