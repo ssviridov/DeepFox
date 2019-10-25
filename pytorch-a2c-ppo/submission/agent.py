@@ -12,7 +12,7 @@ import numpy as np
 from a2c_ppo_acktr.preprocessors import \
     GridOracle, GridOracleWithAngles, MetaObs, ObjectClassifier
 #change this path to specify a model you want to submit:
-DOCKER_CONFIG_PATH = '/aaio/data/pretrained/config3-150M/sub_config.yaml'
+DOCKER_CONFIG_PATH = '/aaio/data/pretrained/config3-150M-clf/sub_config.yaml'
 
 
 class ActionAdapter(object):
@@ -226,7 +226,7 @@ class Agent(object):
             map_location=self.device
         )
         self.model = data['model'] if isinstance(data, dict) else data[0]
-
+        self._trained_steps = data['total_step']
         self.model.to(self.device)
         self.model.eval()
         self.greedy = self.config['greedy_policy']
@@ -271,7 +271,8 @@ class Agent(object):
     def report_config(self):
         print("current device:", self.device)
         print("greedy:", self.greedy)
-        print("model:", self.config['model_path'])
+        print("model: {}".format(self.config['model_path']),
+              'trained for {} steps'.format(self._trained_steps))
         print()
 
     def reset(self, t=250):

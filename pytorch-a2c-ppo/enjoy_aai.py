@@ -100,7 +100,8 @@ env = make_vec_envs_aai(
     headless=False,
     grid_oracle_kwargs=oracle_kwargs,
     classifier_kwargs=classifier_args,
-    image_only=image_only
+    image_only=image_only,
+    action_mode=train_args.get('action_mode', 'normal')
 )
 
 # We need to use the same statistics for normalization as used in training

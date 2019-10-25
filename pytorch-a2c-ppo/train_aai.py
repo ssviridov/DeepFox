@@ -203,7 +203,7 @@ def main():
         classifier_kwargs=args.classifier_args,
         image_only=len(args.extra_obs) == 0,
         docker_training=args.docker_training,
-        reduced_actions=args.reduced_actions,
+        action_mode=args.action_mode,
         scale_reward=args.scale_reward
     )
 

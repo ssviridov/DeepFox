@@ -50,10 +50,11 @@ def get_args():
         help="Number of image frames to stack into agent's observation, (default: 2)",
     )
     parser.add_argument(
-        '--reduced-actions',
-        action='store_true',
-        default=False,
-        help="Removes backward movements from agent's action space. (default: False)"
+        '--action-mode',
+        type=str,
+        default="normal",
+        help="Three modes: 'reduced, 'normal', 'extended'. "
+             "'reduced' removes backward movements, 'extended' adds 5xLeft and 5xRight actions. (default: normal)"
     )
     #GRID-ORACLE arguments:
     #parser.add_argument(

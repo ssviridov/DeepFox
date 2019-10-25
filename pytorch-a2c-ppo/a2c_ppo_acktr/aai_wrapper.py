@@ -32,12 +32,12 @@ def rotate(vec, angle):
 
 class AnimalAIWrapper(gym.Env):
 
-    ENV_RELOAD_PERIOD = 1200 #2400 #total update period( with num_processes==16) will be in range [2M, 6M] steps
+    ENV_RELOAD_PERIOD = 2400 #total update period( with num_processes==16) will be in range [2M, 6M] steps
 
     def __init__(self, env_path, rank, config_generator,
                  action_repeat=1, docker_training=False,
                  headless=False, image_only=True, channel_first=True,
-                 reduced_actions=False, scale_reward=False):
+                 action_mode="normal", scale_reward=False):
 
         super(AnimalAIWrapper, self).__init__()
         #if config_generator is None we use random config!
@@ -63,14 +63,16 @@ class AnimalAIWrapper(gym.Env):
         #self.env = UnityEnvHeadless(**self._env_args)
         #self._set_config(self.config_generator.next_config())
 
-        lookup_func = lambda a: {'Learner':np.array([a], dtype=float)}
-        if reduced_actions:
-            lookup = itertools.product([0,1], [0,1,2])
-        else:
-            lookup = itertools.product([0,1,2], repeat=2)
-
-        lookup = dict(enumerate(map(lookup_func, lookup)))
+        lookup = self.create_actions(action_mode)
         self.action_map = lambda a: lookup[a]
+
+        #lookup_func = lambda a:{'Learner':np.array([a], dtype=float)}
+        #if action_mode:
+        #    lookup = itertools.product([0, 1], [0, 1, 2])
+        #else:
+        #    lookup = itertools.product([0, 1, 2], repeat=2)
+        #lookup = dict(enumerate(map(lookup_func, lookup)))
+
         
         self.observation_space = self._make_obs_space()
         self.action_space = Discrete(len(lookup))
@@ -82,6 +84,33 @@ class AnimalAIWrapper(gym.Env):
         self.angle = np.zeros((1,), dtype=np.float32)
 
         #print("Time limit: ", self.time_limit)
+
+    def create_actions(self, action_set_mode=None):
+        if action_set_mode is None:
+            action_set_mode = 'normal'
+
+        lookup_func = lambda a:{'Learner':np.array([a], dtype=float)}
+        if action_set_mode == "reduced":
+            lookup = itertools.product([0, 1], [0, 1, 2])
+            lookup = dict(enumerate(map(lookup_func, lookup)))
+
+        elif action_set_mode == 'normal':
+            lookup = itertools.product([0, 1, 2], repeat=2)
+            lookup = dict(enumerate(map(lookup_func, lookup)))
+
+        elif action_set_mode == "extended":
+            n_repeat = 5
+            left_action_id = 1
+            right_action_id = 2
+            lookup = itertools.product([0, 1, 2], repeat=2)
+            lookup = dict(enumerate(map(lookup_func, lookup)))
+            lookup[len(lookup)] = {"Repeater": [left_action_id]*n_repeat}
+            lookup[len(lookup)] = {"Repeater": [right_action_id]*n_repeat}
+
+        else:
+            ValueError("There is no such mode: {}".format(action_set_mode))
+
+        return lookup
 
     def _reload_env(self):
         if self.env:
@@ -194,10 +223,17 @@ class AnimalAIWrapper(gym.Env):
 
     def step(self, action):
         r = 0
-        for i in range(self.action_repeat):
-            self._update_angle(action)
+
+        act_dict = self.action_map(action)
+        if "Repeater" in act_dict:
+            acts = act_dict['Repeater']
+        else:
+            acts = [action]
+
+        for i, act in enumerate(acts):
+            self._update_angle(act)
             obs, r_, done = self.process_state(
-                self.env.step(vector_action=self.action_map(action))
+                self.env.step(vector_action=self.action_map(act))
             )
             r += r_
             self.t += 1

@@ -143,7 +143,8 @@ def main(num_repeat, info_mode):
             cell_side=2,
         ),
         channel_first=True,
-        image_only=False
+        image_only=False,
+        action_mode="normal",
     )
     env = make()
     if info_mode == 'classifier':

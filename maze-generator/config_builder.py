@@ -47,49 +47,20 @@ MAX_NUM_ITEMS = 25
 ARENA_X = 40.
 ARENA_Z = 40.
 
-
-def make_item(name, fix_color=True):
-    """
-    Make randomized item by name
-    fix_color: Use standard colors (True) or randomize colors (False)
-    """
-    if name not in ALL_NAMES:
-        raise ValueError('Unknown name')
-    if not fix_color:
-        color = RGB(*np.random.randint(255, size=3))
-    elif name == 'Wall':
-        color = FIXED_COLORS[random.randint(0, 1)]
-    elif name == 'CylinderTunnel':
-        color = FIXED_COLORS[0]
-    elif name == 'Ramp':
-        color = RGB(255, 0, 255)
-    else:
-        color = FIXED_COLORS[0]
-
-    size_min, size_max = size_constraints_from_name(name)
-    size = np.random.rand(3) * (size_max - size_min) + size_min
-    size = Vector3(*[float(e) for e in size])
-
-    radius = 0.5 * np.sqrt(size.x ** 2 + size.z ** 2)
-    radius = min(radius, 19)
-
-    position = np.random.rand(3) * (POS_MAX - POS_MIN - POS_MASK * 2 * radius) + POS_MIN + POS_MASK * radius
-    position = Vector3(*[float(e) for e in position])
-    if ('Zone' in name) or ('Tunnel' in name):
-        position.y = 0
-
-    rotation = float(np.random.rand()) * 360
-
-    item = Item(name, [position], [rotation], [size], [color])
-    return item
+def fix_size(size, size_error=0.01):
+    "To avoid collisions due to float rounding errors"
+    size = [s - size_error for s in size]
+    return size
 
 
-def make_wall(pos, size, rotation, transparent_prob=0., color_prob=.0):
+def make_wall(pos, size, rotation, transparent_prob=0., color_prob=.0, size_error=0.01):
     pos = [randomize(p) for p in pos]
     size = [randomize(s) for s in size]
+    size = fix_size(size, size_error)
     rotation = randomize(rotation)
 
     if not check_position(pos): return None
+
 
     is_transparent = random.random() < transparent_prob
     random_color = random.random() < color_prob
@@ -103,7 +74,6 @@ def make_wall(pos, size, rotation, transparent_prob=0., color_prob=.0):
         sizes=[Vector3(*size)],
         colors=[color]
     )
-
 
     return wall
 
@@ -144,9 +114,11 @@ def make_bad_goal(penalty, pos=(-1,-1,-1), bounce_prob=0.0):
     return bad_goal
 
 
-def make_ramp(pos, size, rotation, color_prob=.0):
+def make_ramp(pos, size, rotation, color_prob=.0, size_error=0.01):
     pos = [randomize(p) for p in pos]
     size = [randomize(s) for s in size]
+    size = fix_size(size, size_error)
+
     rotation = randomize(rotation)
 
     if not check_position(pos): return None
@@ -164,6 +136,17 @@ def make_ramp(pos, size, rotation, color_prob=.0):
     )
     return ramp
 
+def fix_agent(pos, rotation=-1):
+    rotation = randomize(rotation)
+    pos = [randomize(p) for p in pos]
+    if not check_position(pos): return None
+
+    agent = Item(
+        name="Agent",
+        positions=[Vector3(*pos)],
+        rotations=[rotation],
+    )
+    return agent
 
 N, S, W, E = ('n', 's', 'w', 'e')
 
@@ -178,8 +161,10 @@ def randomize(float_or_pair):
 
 
 class ArenaMaze(object):
-    ARENA_X = 40.
-    ARENA_Z = 40.
+    X_MIN = 0.
+    X_MAX = 40.
+    Z_MIN = 0.
+    Z_MAX = 40.
 
     def __init__(
             self, X,Z,
@@ -187,20 +172,32 @@ class ArenaMaze(object):
             wall_height=4.,#could be a pair of values
             color_prob=0.,
             transparent_prob=0.,
-            width_error=0.01,
+            size_error=0.01,
+            offset=0.,
             verbose=False,
     ):
         super(ArenaMaze, self).__init__()
+        off_x, off_z = (offset, offset) if np.isscalar(offset) else offset
+        self.X_MIN = self.X_MIN + off_x
+        self.X_MAX = self.X_MAX - off_x
+
+        self.Z_MIN = self.Z_MIN + off_z
+        self.Z_MAX = self.Z_MAX - off_z
+        self.arena_len_x = self.X_MAX - self.X_MIN
+        self.arena_len_z = self.Z_MAX - self.Z_MIN
+
         self.x_cells = X
         self.z_cells = Z
-        self.wall_width=wall_width - width_error
+        self.wall_width=wall_width
         self.wall_height=wall_height
         self.color_prob=color_prob
         self.transparent_prob=transparent_prob
+        self.size_error = size_error
 
         self.maze = Maze.generate(X, Z)
-        self.cell_len_x = (ARENA_X - (self.x_cells - 1) * wall_width) / self.x_cells
-        self.cell_len_z = (ARENA_Z - (self.z_cells - 1) * wall_width) / self.z_cells
+
+        self.cell_len_x = (self.arena_len_x - (self.x_cells - 1) * wall_width) / self.x_cells
+        self.cell_len_z = (self.arena_len_z - (self.z_cells - 1) * wall_width) / self.z_cells
 
         self.h_wall_size = (self.cell_len_x, wall_height, wall_width)
         self.v_wall_size = (wall_width, wall_height, self.cell_len_z)
@@ -217,6 +214,7 @@ class ArenaMaze(object):
         self._goals = []
         self._movables = []
         self._obstacles = []
+        self.agent = None
 
         if verbose:
             print('MAZE:')
@@ -224,13 +222,15 @@ class ArenaMaze(object):
             print('one_side cells:',  len(self.maze.one_wall_cells()))
             print("corridor cells:",  len(self.maze.corridor_cells()))
             print('no_corner cells:', len(self.maze.no_corner_cells()))
+            print('num_walls:', len(self._walls))
 
     def _make_grid_wall(self, cell, direction):
         assert direction in DIRECTIONS, \
             "A direction must be one of those: {}".format(DIRECTIONS)
         x,z = cell
-        pos_x = self.cell_len_x * x + self.wall_width * (x - 1)
-        pos_z = self.cell_len_z * z + self.wall_width * (z - 1)
+        pos_x, pos_z = self.top_left_point(x,z)
+        #pos_x = self.cell_len_x * x + self.wall_width * (x - 1) + self.X_MIN
+        #pos_z = self.cell_len_z * z + self.wall_width * (z - 1) + self.Z_MIN
 
         if direction in [N,S]:
             size = self.h_wall_size
@@ -249,20 +249,26 @@ class ArenaMaze(object):
 
         pos = (pos_x, 0., pos_z)
 
-        wall = make_wall(pos, size, 0, self.transparent_prob, self.color_prob)
+        wall = make_wall(pos, size, 0, self.transparent_prob, self.color_prob, self.size_error)
         return wall
 
     def _make_grid_pillar(self, south_east_cell):
         x, z = south_east_cell
-
-        pos_x = self.cell_len_x * x + self.wall_width * (x - 0.5)
-        pos_z = self.cell_len_z * z + self.wall_width * (z - 0.5)
+        print("pillar to the top left of {}".format((x,z)))
+        pos_x, pos_z = self.top_left_point(x,z) #without walls
+        pos_x += self.wall_width * 0.5 #move to the center of wall
+        pos_z += self.wall_width * 0.5
+        print('pillar coords:', (pos_x, pos_z))
+        #pos_x = self.cell_len_x * x + self.wall_width * (x - 0.5) + self.X_MIN
+        #pos_z = self.cell_len_z * z + self.wall_width * (z - 0.5) + self.Z_MIN
 
         pillar = make_wall(
             (pos_x, 0., pos_z),
             self.pillar_size,
-            0, self.transparent_prob, self.color_prob
+            0, self.transparent_prob, self.color_prob,
+            self.size_error
         )
+        print("pillar is not None" if pillar else "None", "\n")
         return pillar
 
     def top_left_point(self, x,z, inside_walls=False):
@@ -274,8 +280,8 @@ class ArenaMaze(object):
         """
         num_x_walls = x if inside_walls else x-1
         num_z_walls = z if inside_walls else z-1
-        pos_x = self.cell_len_x * x + self.wall_width * num_x_walls
-        pos_z = self.cell_len_z * z + self.wall_width * num_z_walls
+        pos_x = self.cell_len_x * x + self.wall_width * num_x_walls + self.X_MIN
+        pos_z = self.cell_len_z * z + self.wall_width * num_z_walls + self.Z_MIN
         return (pos_x, pos_z)
 
     def _create_maze_walls(self):
@@ -283,19 +289,39 @@ class ArenaMaze(object):
         # cycle to create walls:
         for z in range(self.z_cells):
             for x in range(self.x_cells):
-                for d in [E, S]:  # wall directions
+                directions = [E,S]
+                if z == 0: directions.append(N)
+                if x == 0: directions.append(W)
+
+                for d in directions:  # wall directions
                     if d in self.maze[x, z]:  # is wall exists?
                         wall = self._make_grid_wall((x,z), d)
                         if wall: walls.append(wall)
 
-        for z in range(1, self.z_cells):
-            for x in range(1, self.x_cells):
-                se_walls = set('se') & self.maze[x - 1, z - 1].walls
-                nw_walls = set('nw') & self.maze[x, z].walls
+        for z in range(0, self.z_cells+1):
+            for x in range(0, self.x_cells+1):
+                prev_cell = self.maze[x - 1, z - 1] #up and left from the current
+                prev_walls = prev_cell.walls if prev_cell else set()
+                se_walls = set('se') & prev_walls
+
+                curr_cell = self.maze[x,z]
+                curr_walls = curr_cell.walls if curr_cell else set()
+                nw_walls = set('nw') & curr_walls
+
                 if se_walls or nw_walls:
                     pillar = self._make_grid_pillar((x,z))
                     if pillar:
                         walls.append(pillar)
+
+        #cycles above ommit two corner pillars, and i'm to lazy to rewrite entire algorithm:
+        if self.maze[0, self.z_cells-1].walls & set('ws'):
+            pillar = self._make_grid_pillar((0, self.z_cells))
+            if pillar: walls.append(pillar)
+
+        if self.maze[self.x_cells-1, 0].walls & set('ne'):
+            pillar = self._make_grid_pillar((self.x_cells, 0))
+            if pillar: walls.append(pillar)
+
 
         return walls
 
@@ -306,10 +332,10 @@ class ArenaMaze(object):
             goals.append(goal)
 
         else:
-            z_area = self.ARENA_Z/num_goals
+            z_area = self.arena_len_z /num_goals
             for i in range(num_goals):
-                low_z = z_area*i+area_delim
-                high_z = z_area*(i+1)-area_delim
+                low_z = z_area*i+area_delim + self.Z_MIN
+                high_z = z_area*(i+1)-area_delim + self.Z_MIN
                 pos_i = (-1,-1, (low_z, high_z))
                 goal_i = make_goal(reward, pos_i, True, bounce_prob)
                 goals.append(goal_i)
@@ -323,10 +349,10 @@ class ArenaMaze(object):
             goals.append(goal)
 
         else:
-            x_area = self.ARENA_X / num_goals
+            x_area = self.arena_len_x / num_goals
             for i in range(num_goals):
-                low_x = x_area*i + area_delim
-                high_x = x_area*(i + 1) - area_delim
+                low_x = x_area*i + area_delim + self.X_MIN
+                high_x = x_area*(i + 1) - area_delim + self.X_MIN
                 pos_i = ((low_x, high_x), -1, -1)
                 goal_i = make_bad_goal(reward, pos_i, bounce_prob)
                 goals.append(goal_i)
@@ -346,7 +372,7 @@ class ArenaMaze(object):
             self._obstacles.extend(obstacle_objects)
 
     def _make_ramp(self, cell, is_horizontal):
-        min_ramp_length = 3
+        min_ramp_length = 2.5
         max_ramp_width = 5
         max_ramp_height = 3
         #check if there is enough space for a ramp obstacle:
@@ -386,8 +412,8 @@ class ArenaMaze(object):
             r_ramp_pos = (center_x, 0, center_z+offset)
 
         right_angle = (180 + l_angle)%360
-        l_ramp = make_ramp(l_ramp_pos, ramp_size, l_angle)
-        r_ramp = make_ramp(r_ramp_pos, ramp_size, right_angle)
+        l_ramp = make_ramp(l_ramp_pos, ramp_size, l_angle, size_error=self.size_error)
+        r_ramp = make_ramp(r_ramp_pos, ramp_size, right_angle, size_error=self.size_error)
 
         wall_pos = (center_x, 0., center_z)
         wall_size = (self.wall_width, height, cell_width)
@@ -395,10 +421,24 @@ class ArenaMaze(object):
             wall_pos, wall_size,
             wall_angle,
             self.transparent_prob,
-            self.color_prob
+            self.color_prob,
+            self.size_error
         )
 
         return l_ramp, obstacle_wall, r_ramp
+
+
+    def fix_agent_inside(self, cell=None):
+        if cell is None:
+            x_min, x_max = self.X_MIN, self.X_MAX
+            z_min, z_max = self.Z_MIN, self.Z_MAX
+        else:
+            x_min, z_min = self.top_left_point(*cell, inside_walls=True)
+            x_max, z_max = x_min + self.cell_len_x, z_min + self.cell_len_z
+
+        pos = [(x_min, x_max), 3.5, (z_min, z_max)]
+        self.agent = fix_agent(pos)
+
 
     def add_tunnels(self, cell, wall_width):
         pass
@@ -408,129 +448,13 @@ class ArenaMaze(object):
         items.extend(self._walls)
         items.extend(self._obstacles)
         items.extend(self._goals)
+        if self.agent:
+            items.append(self.agent)
 
         arena = Arena(T, items)
         config = ArenaConfig()
         config.arenas[0] = arena
         return config
-
-
-def save_config(config, name):
-    ensure_dir(name)
-    with open(filename,'w') as f:
-        yaml.dump(config, f)
-
-
-def create_maze_walls(
-    x_cells,
-    z_cells,
-    wall_width=1.,
-    wall_height=2.,
-    **wall_kwargs,
-):
-    wall_width -= 0.01
-    maze = Maze.generate(x_cells, z_cells)
-    print('MAZE:')
-    print(maze)
-    print('one_side cells:', len(maze.one_wall_cells()))
-    print("corridor cells:", len(maze.corridor_cells()))
-    print('no_corner cells:', len(maze.no_corner_cells()))
-
-    walls = []
-    grid_size = (x_cells, z_cells)
-    #cycle to create walls:
-    for z in range(z_cells):
-        for x in range(x_cells):
-            for d in [E, S]: #wall directions
-                if d in maze[x,z]: # is wall exists?
-                    wall = make_grid_wall(
-                        (x,z), grid_size, d,
-                        wall_width, wall_height,
-                        **wall_kwargs
-                    )
-
-                    if wall: walls.append(wall)
-
-    pillar_size = (wall_width, wall_height, wall_width)
-    for z in range(1,z_cells):
-        for x in range(1, x_cells):
-            se_walls =  set('se') & maze[x-1, z-1].walls
-            nw_walls = set('nw') & maze[x,z].walls
-            if se_walls or nw_walls:
-                pillar = make_grid_pillar(
-                    (x,z), grid_size,
-                    wall_width, wall_height,
-                    **wall_kwargs
-                )
-                if pillar:
-                    walls.append(pillar)
-
-    return walls
-
-
-def make_grid_wall(
-        cell, grid_size,
-        direction,
-        wall_width=1.,
-        wall_height=2.,
-        transparent_prob=0.,
-        color_prob=0.
-):
-    x_cells, z_cells = grid_size
-    x, z = cell
-    x_wall_len = (ARENA_X - (x_cells - 1) * wall_width) / x_cells
-    z_wall_len = (ARENA_Z - (z_cells - 1) * wall_width) / z_cells
-    h_wall_size = (x_wall_len, wall_height, wall_width)
-    v_wall_size = (wall_width, wall_height, z_wall_len)
-
-    pos_x = x_wall_len*x + wall_width*(x-1)
-    pos_z = z_wall_len*z + wall_width*(z-1)
-
-    if direction in 'ns':
-        size = h_wall_size
-
-        pos_x += wall_width + x_wall_len/2
-        pos_z += wall_width/2.
-        if direction == 's':
-            pos_z += z_wall_len + wall_width
-    else:
-        size = v_wall_size
-
-        pos_x += wall_width/2.
-        pos_z += wall_width + z_wall_len/2
-        if direction == 'e':
-            pos_x += x_wall_len + wall_width
-
-    pos = (pos_x, 0., pos_z)
-
-    if check_position(pos):
-        return make_wall(pos, size, 0, transparent_prob, color_prob)
-    else:
-        return None
-
-
-def make_grid_pillar(
-        cell,
-        grid_size,
-        wall_width=1.,
-        wall_height=2.,
-        transparent_prob=0.,
-        color_prob=0.,
-):
-    x_cells, z_cells = grid_size
-    x, z = cell
-    x_wall_len = (ARENA_X - (x_cells - 1) * wall_width) / x_cells
-    z_wall_len = (ARENA_Z - (z_cells - 1) * wall_width) / z_cells
-
-    pos_x = x_wall_len * x + wall_width * (x - 0.5)
-    pos_z = z_wall_len * z + wall_width * (z - 0.5)
-
-    pillar = make_wall(
-        (pos_x, 0., pos_z),
-        (wall_width, wall_height, wall_width),
-        0, transparent_prob, color_prob
-    )
-    return pillar
 
 
 def check_position(pos, margin_error=0.01):
@@ -541,33 +465,6 @@ def check_position(pos, margin_error=0.01):
     return correct_x and correct_y and correct_z
 
 
-def create_maze(
-        X, Z, time=500,
-        n_goals = 1, #if n_goals == 1 -> green target, otherwise -> gold_target
-        wall_height=2.,
-        wall_width=1.,
-        transparent_prob=0.,
-        color_prob=0.
-):
-    assert n_goals >= 0, "Negative number of goals?"
-    items = []
-
-    walls = create_maze_walls(
-        X, Z, wall_width, wall_height,
-        transparent_prob=transparent_prob,
-        color_prob=color_prob,
-    )
-    print('generated  {} walls!'.format(len(walls)))
-    items.extend(walls)
-    items.append(make_goal(2.5))
-    items.append(make_bad_goal(1.))
-
-    arena = Arena(time, items)
-    config = ArenaConfig()
-    config.arenas[0] = arena
-    return config
-
-
 def ensure_dir(file_path):
     """
     Checks if the containing directories exist,
@@ -576,6 +473,12 @@ def ensure_dir(file_path):
     directory = os.path.dirname(file_path)
     if not os.path.exists(directory):
         os.makedirs(directory)
+
+
+def save_config(config, name):
+    ensure_dir(name)
+    with open(filename,'w') as f:
+        yaml.dump(config, f)
 
 
 def handle_commandline():
@@ -620,6 +523,13 @@ def handle_commandline():
         '--transparent-prob', type=float, default=0.15,
         help="Chance to generate a transparent object(walls and tunnels) [default: 0.15]"
     )
+    parser.add_argument(
+        '--offset', nargs=2, default=(0.,0.), type=float,
+        help="(offset_x, offset_z) moves outer walls of the maze from arena borders.For example:\n"
+             "offset=(0., 0.) then maze covers entire arena;\n"
+             "offset=(10.,10.) them maze has size (20x20), covers 1/4 of the arena and is placed in the center."
+
+    )
     args = parser.parse_args()
     return args
 
@@ -628,7 +538,7 @@ if __name__ == "__main__":
     args = handle_commandline()
 
     X,Y = args.maze_size
-    num_goals = 3 if X * Y >= 10 else 2
+
     num_bad_goals = 2
 
     name_template = os.path.join(
@@ -642,12 +552,14 @@ if __name__ == "__main__":
             wall_height=4.,
             color_prob=args.color_prob,
             transparent_prob=args.transparent_prob,
-            verbose=True
+            offset=args.offset,
+            verbose=True,
         )
 
-        maze.add_goals((1.,2.), num_goals, bounce_prob=0.2)
-        maze.add_bad_goals(1.5, 2, 0.2)
+        maze.add_goals((1.,2.), args.num_goals, bounce_prob=0.2)
+        maze.add_bad_goals(1.5, num_bad_goals, 0.2)
         maze.add_ramps(args.num_ramps)
+        maze.fix_agent_inside()
 
         config = maze.build_config(args.time)
         filename = name_template.format(X, Y, i + 1)
