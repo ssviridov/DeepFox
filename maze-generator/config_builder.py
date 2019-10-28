@@ -136,6 +136,31 @@ def make_ramp(pos, size, rotation, color_prob=.0, size_error=0.01):
     )
     return ramp
 
+
+def make_tunnel(pos, size, rotation, transparent_prob=0., color_prob=.0, size_error=0.01):
+    pos = [randomize(p) for p in pos]
+    size = [randomize(s) for s in size]
+    size = fix_size(size, size_error)
+    rotation = randomize(rotation)
+
+    if not check_position(pos): return None
+
+    is_transparent = random.random() < transparent_prob
+    random_color = random.random() < color_prob
+    name = 'CylinderTunnelTransparent' if is_transparent else 'CylinderTunnel'
+    color = RGB(-1,-1,-1) if random_color else RGB(153,153,153)
+
+    tunnel = Item(
+        name,
+        positions=[Vector3(*pos)],
+        rotations=[rotation],
+        sizes=[Vector3(*size)],
+        colors=[color]
+    )
+
+    return tunnel
+
+
 def fix_agent(pos, rotation=-1):
     rotation = randomize(rotation)
     pos = [randomize(p) for p in pos]
@@ -214,6 +239,7 @@ class ArenaMaze(object):
         self._goals = []
         self._movables = []
         self._obstacles = []
+        self._occupied_cells = []
         self.agent = None
 
         if verbose:
@@ -254,11 +280,11 @@ class ArenaMaze(object):
 
     def _make_grid_pillar(self, south_east_cell):
         x, z = south_east_cell
-        print("pillar to the top left of {}".format((x,z)))
+        #print("pillar to the top left of {}".format((x,z)))
         pos_x, pos_z = self.top_left_point(x,z) #without walls
         pos_x += self.wall_width * 0.5 #move to the center of wall
         pos_z += self.wall_width * 0.5
-        print('pillar coords:', (pos_x, pos_z))
+        #print('pillar coords:', (pos_x, pos_z))
         #pos_x = self.cell_len_x * x + self.wall_width * (x - 0.5) + self.X_MIN
         #pos_z = self.cell_len_z * z + self.wall_width * (z - 0.5) + self.Z_MIN
 
@@ -268,7 +294,7 @@ class ArenaMaze(object):
             0, self.transparent_prob, self.color_prob,
             self.size_error
         )
-        print("pillar is not None" if pillar else "None", "\n")
+        #print("pillar is not None" if pillar else "None", "\n")
         return pillar
 
     def top_left_point(self, x,z, inside_walls=False):
@@ -292,7 +318,6 @@ class ArenaMaze(object):
                 directions = [E,S]
                 if z == 0: directions.append(N)
                 if x == 0: directions.append(W)
-
                 for d in directions:  # wall directions
                     if d in self.maze[x, z]:  # is wall exists?
                         wall = self._make_grid_wall((x,z), d)
@@ -325,22 +350,59 @@ class ArenaMaze(object):
 
         return walls
 
-    def add_goals(self, reward, num_goals=1, bounce_prob=0.2, area_delim=0.01):
+    def add_goals(self, reward, num_goals=1, bounce_prob=0.2, area_delim=None):
+        #these goals are not garantied to appear inside the maze.
+        #so make sure you either have removed some outer maze walls
+        #or your maze covers entire arena space
+        #if you want to make sure you goal will appear inside the maze use
+        # add_fixed_goal
+
         goals = []
         if num_goals == 1:
             goal = make_goal(reward, bounce_prob=bounce_prob)
             goals.append(goal)
 
         else:
+            if area_delim is None:
+                area_delim = (self.arena_len_z / 4)/(num_goals-1)
+            #if you specify a range in the position it means that it will actually select a fixed
+            #random value inside the range! So we make sure that this range doesn't contain
+            #obviously imposible values(e.g. you can't place a ball with radius 1. at pos_z=0.5)
+            max_reward = reward if np.isscalar(reward) else max(reward)
+            area_delim = max(area_delim, max_reward)
+
             z_area = self.arena_len_z /num_goals
             for i in range(num_goals):
-                low_z = z_area*i+area_delim + self.Z_MIN
-                high_z = z_area*(i+1)-area_delim + self.Z_MIN
+                low_z = z_area*i + self.Z_MIN + area_delim/2.
+                high_z = z_area*(i+1) + self.Z_MIN - area_delim/2.
                 pos_i = (-1,-1, (low_z, high_z))
                 goal_i = make_goal(reward, pos_i, True, bounce_prob)
                 goals.append(goal_i)
 
         self._goals.extend(goals)
+
+    def add_fixed_goal(self, cell, reward, is_multi=False, bounce_prob=0.2):
+        "sets goal in inside the specified cell!"
+        assert cell not in self._occupied_cells, "you can't place agent in the same cell with obstacle"
+        x_min, z_min = self.top_left_point(*cell, inside_walls=True)
+        x_max, z_max = x_min + self.cell_len_x, z_min + self.cell_len_z
+
+        self._occupied_cells.append(cell)
+
+        pos = [
+            (x_min+reward/2., x_max-reward/2.),
+            -1.,
+            (z_min+reward/2., z_max-reward/2.)
+        ]
+        self._goals.append(make_goal(reward, pos, is_multi, bounce_prob))
+
+    def get_empty_cells(self):
+        cells = []
+        for x in range(self.x_cells):
+            for z in range(self.z_cells):
+                if (x, z) not in self._occupied_cells:
+                    cells.append((x,z))
+        return cells
 
     def add_bad_goals(self, reward, num_goals=1, bounce_prob=0.2, area_delim=-0.01):
         goals = []
@@ -359,19 +421,34 @@ class ArenaMaze(object):
 
         self._goals.extend(goals)
 
-    def add_ramps(self, n, percent=None, between_cells=False):
+    def add_obstacles(self, n, ramp_tunnel_portions=(0.5, 0.5), between_cells=False):
+
+        assert not between_cells, 'between_cells=True is not implemented!'
         cells = self.maze.corridor_cells()
+        cells = [c for c in cells if c not in self._occupied_cells]
         n = min(len(cells), n)
         if n == 0: return
+
+        probs = np.array(ramp_tunnel_portions)/sum(ramp_tunnel_portions)
+
+        funcs = np.random.choice(
+            [self._make_ramp, self._make_tunnel],
+            n, p=probs
+        )
         ids = set(np.random.choice(len(cells), size=n, replace=False))
-        for id in ids:
+
+        for i, id in enumerate(ids):
+            make_obstacle = funcs[i]
             x,z = cells[id]
+            self._occupied_cells.append((x, z))
+
             is_horizontal = 'n' in self.maze[x,z].walls #horisontal corridor
-            print('add horizontal ramp' if is_horizontal else 'add vertical ramp')
-            obstacle_objects = self._make_ramp((x,z), is_horizontal)
+
+            obstacle_objects = make_obstacle((x,z), is_horizontal)
             self._obstacles.extend(obstacle_objects)
 
     def _make_ramp(self, cell, is_horizontal):
+        print('add h-ramp' if is_horizontal else 'add v-ramp')
         min_ramp_length = 2.5
         max_ramp_width = 5
         max_ramp_height = 3
@@ -425,23 +502,83 @@ class ArenaMaze(object):
             self.size_error
         )
 
-        return l_ramp, obstacle_wall, r_ramp
+        return  l_ramp, obstacle_wall, r_ramp
+
+    def _make_tunnel(self, cell, is_horizontal):
+        print('add h-tunnel' if is_horizontal else 'add v-tunnel')
+        min_tunnel_width = 2.
+        # check if there is enough space for a tunnel obstacle:
+        min_cell_side = min(self.cell_len_x, self.cell_len_z)
+        assert min_tunnel_width < min_cell_side
+
+        x, z = cell
+        left_x, top_z = self.top_left_point(x, z, inside_walls=True)
+        center_x = left_x + self.cell_len_x / 2
+        center_z = top_z + self.cell_len_z / 2
+
+        if is_horizontal:
+            cell_len, cell_width = self.cell_len_x, self.cell_len_z
+        else:
+            cell_len, cell_width = self.cell_len_z, self.cell_len_x
+
+        length = randomize((self.wall_width+1.,  cell_len))
+        width = randomize((max(2, cell_width/4), cell_width*0.7))
+        height = randomize((3., self.wall_height))
+
+        # x - is a width of a tunnel, z is it's length ¯\_(ツ)_/¯
+        tunnel_size = (width, height, length)
+        tunnel_pos = (center_x, 0., center_z)
+        # size of side walls on the same dim as tunnel width:
+        wall_len = (cell_width - width) / 2
+        wall_size = (wall_len, self.wall_height, self.wall_width)
+        wall_offset = width / 2 + wall_len / 2 #shift from the cell center to the width
+
+        if is_horizontal:
+            # angle=0 means upward direction is from north->south,  angle=270: west-> east ¯\_(ツ)_/¯
+            tunnel_angle = 90
+            wall_angle = 90
+            t_wall_pos = (center_x, 0, center_z-wall_offset)
+            b_wall_pos = (center_x, 0, center_z+wall_offset)
+        else:
+            tunnel_angle = 0
+            wall_angle = 0
+            t_wall_pos = (center_x-wall_offset, 0, center_z)
+            b_wall_pos = (center_x+wall_offset, 0, center_z)
+
+        t_wall = make_wall(
+            t_wall_pos, wall_size, wall_angle,
+            self.transparent_prob, self.color_prob, self.size_error
+        )
+        w_wall = make_wall(
+            b_wall_pos, wall_size, wall_angle,
+            self.transparent_prob, self.color_prob, self.size_error
+        )
+
+        tunnel = make_tunnel(
+            tunnel_pos, tunnel_size, tunnel_angle,
+            self.transparent_prob, self.color_prob, self.size_error
+        )
+
+        return tunnel, t_wall, w_wall
 
 
-    def fix_agent_inside(self, cell=None):
+    def fix_agent_inside_maze(self, cell=None, agent_radius=1.):
+        #i don't know actual radius. this is just an estimate!
         if cell is None:
             x_min, x_max = self.X_MIN, self.X_MAX
             z_min, z_max = self.Z_MIN, self.Z_MAX
         else:
+            assert cell not in self._occupied_cells, "you can't place agent in the same cell with obstacle"
             x_min, z_min = self.top_left_point(*cell, inside_walls=True)
             x_max, z_max = x_min + self.cell_len_x, z_min + self.cell_len_z
 
-        pos = [(x_min, x_max), 3.5, (z_min, z_max)]
+        pos = [
+            (x_min+agent_radius, x_max-agent_radius),
+            -1.,
+            (z_min+agent_radius, z_max-agent_radius)
+        ]
         self.agent = fix_agent(pos)
 
-
-    def add_tunnels(self, cell, wall_width):
-        pass
 
     def build_config(self,T):
         items = []
@@ -558,9 +695,12 @@ if __name__ == "__main__":
 
         maze.add_goals((1.,2.), args.num_goals, bounce_prob=0.2)
         maze.add_bad_goals(1.5, num_bad_goals, 0.2)
-        maze.add_ramps(args.num_ramps)
-        maze.fix_agent_inside()
 
+        obstacles = [args.num_ramps, args.num_tunnels]
+        n_obstacles = len(obstacles) #max(4, len(obstacles))
+
+        maze.add_obstacles(n_obstacles, obstacles)
         config = maze.build_config(args.time)
+
         filename = name_template.format(X, Y, i + 1)
         save_config(config, filename)
