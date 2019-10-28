@@ -169,6 +169,11 @@ def get_args():
         default=5,
         help='number of forward steps in A2C (default: 5)')
     parser.add_argument(
+        '-rs', '--rollout-splits', type=int, default=1,
+        help='Spits rollouts into <rollout-splits> shorter sequences and stack them along batch dimension during gradient update!'
+             'Make sense only if you are using a sequential model! (default: 1)'
+    )
+    parser.add_argument(
         '--ppo-epoch',
         type=int,
         default=4,
@@ -251,6 +256,9 @@ def get_args():
             config = json.load(f)
         for k, v in config.items():
             d[k] = v
+
+    if args.policy == 'ff':
+        args.rollout_splits = 1
 
     if not args.policy.startswith('cached'):
         args.memory_len = 1

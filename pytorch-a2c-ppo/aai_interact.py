@@ -12,7 +12,7 @@ from a2c_ppo_acktr.preprocessors import ObjectClassifier
 
 aai_path = "aai_resources/env/AnimalAI"
 config_path = "../maze-generator/new_grid_mazes/"#"aai_resources/asorokin/"
-config_path = config_path + "test" #/5_walls/5_walls_gold.yaml"
+config_path = config_path + "maze-4x4-1.yaml" #/5_walls/5_walls_gold.yaml"
 
 
 def get_config_name(env_aai):
@@ -127,7 +127,7 @@ def main(num_repeat, info_mode):
 
     num_episodes = num_repeat*num_configs
 
-    #gen_config = RandomizedGenerator.create(gen_config, 0.5, 0.5, 0.5)
+    gen_config = RandomizedGenerator.create(gen_config, 0., 0.2, 0.2)
     gen_config = FixedTimeGenerator(gen_config, 1500)
 
     rank = np.random.randint(1200, 2000)

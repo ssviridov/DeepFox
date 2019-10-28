@@ -12,7 +12,7 @@ import numpy as np
 from a2c_ppo_acktr.preprocessors import \
     GridOracle, GridOracleWithAngles, MetaObs, ObjectClassifier
 #change this path to specify a model you want to submit:
-DOCKER_CONFIG_PATH = '/aaio/data/pretrained/config3-150M-clf/sub_config.yaml'
+DOCKER_CONFIG_PATH = '/aaio/data/pretrained/ppo-ff-rnd/sub_config.yaml'
 
 
 class ActionAdapter(object):

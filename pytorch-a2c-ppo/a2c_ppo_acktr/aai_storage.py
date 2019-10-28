@@ -9,7 +9,8 @@ def create_storage(
         num_processes,
         obs_space,
         action_space,
-        internal_state_shape
+        internal_state_shape,
+        rollout_splits=1,
 ):
     if isinstance(obs_space, gym.spaces.Dict):
         storage_cls = RolloutStorageWithDictObs
@@ -19,7 +20,8 @@ def create_storage(
     rollouts = storage_cls(
         num_steps, num_processes,
         obs_space, action_space,
-        internal_state_shape
+        internal_state_shape,
+        rollout_splits
     )
     return rollouts
 
@@ -46,6 +48,7 @@ class DictAsTensor(object):
                 [dat.tensor[k] for dat in list_of_dict_as_tensors], dim=dim
             )
         return DictAsTensor.from_dict(stacked)
+
 
     def __init__(self, dict_of_tensors):
         """Makes a shallow copy of the dictionary of tensors"""
@@ -86,14 +89,29 @@ class DictAsTensor(object):
     def asdict(self):
         return dict(self.tensor)
 
+    def call(self, method, *args, **kwargs):
+        results = {k:getattr(t,method)(*args, **kwargs) for k,t in self.tensor.items()}
+        return self.from_dict(results)
+
+    def split_cat(self, chunk_len):
+        """
+        splits along first dimension the concats along second
+        """
+        return self.from_dict(
+            {k:torch.cat(t.split(chunk_len), dim=1) for k,t in self.tensor.items()}
+        )
 
 class RolloutStorageWithDictObs(object):
 
     def __init__(self, num_steps, num_processes, obs_space, action_space,
-                 internal_state_shape):
+                 internal_state_shape, rollout_splits=None):
         # Be really cautions with DictAsTensor.
         # It's only simulate behavior of the real tensors on the operations
         # that i use here
+        if rollout_splits is None: rollout_splits = 1
+        assert 0 < rollout_splits < num_steps and num_steps % rollout_splits == 0, "rollout_splits must devide num_steps!"
+        self.rollout_splits = rollout_splits
+
         obs_shapes = {k:sp.shape for k,sp in obs_space.spaces.items()}
         self.obs = DictAsTensor.create_empty(
             obs_shapes, repeat_shape=(num_steps+1, num_processes)
@@ -146,6 +164,7 @@ class RolloutStorageWithDictObs(object):
 
         self.step = (self.step + 1) % self.num_steps
 
+    @torch.no_grad()
     def after_update(self):
         self.obs[0].copy_(self.obs[-1])
         self.internal_states[0].copy_(self.internal_states[-1])
@@ -236,11 +255,14 @@ class RolloutStorageWithDictObs(object):
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
 
     def recurrent_generator(self, advantages, num_mini_batch):
-        num_processes = self.rewards.size(1)
+        obs, internal_states, actions, value_preds, returns, masks, action_log_probs, advantages = self.prepare_rollout(advantages)
+
+        num_processes = returns.size(1) #self.rewards.size(1)
         assert num_processes >= num_mini_batch, (
             "PPO requires the number of processes ({}) "
             "to be greater than or equal to the number of "
             "PPO mini batches ({}).".format(num_processes, num_mini_batch))
+
         num_envs_per_batch = num_processes // num_mini_batch
         perm = torch.randperm(num_processes)
         for start_ind in range(0, num_processes, num_envs_per_batch):
@@ -255,19 +277,20 @@ class RolloutStorageWithDictObs(object):
 
             for offset in range(num_envs_per_batch):
                 ind = perm[start_ind + offset]
-                obs_batch.append(self.obs[:-1, ind])
 
-                internal_states_batch.append(
-                    self.internal_states[0:1, ind])
-                actions_batch.append(self.actions[:, ind])
-                value_preds_batch.append(self.value_preds[:-1, ind])
-                return_batch.append(self.returns[:-1, ind])
-                masks_batch.append(self.masks[:-1, ind])
-                old_action_log_probs_batch.append(
-                    self.action_log_probs[:, ind])
+                obs_batch.append(obs[:, ind])
+                internal_states_batch.append(internal_states[0:1, ind])
+
+                actions_batch.append(actions[:, ind])
+                value_preds_batch.append(value_preds[:, ind])
+
+                return_batch.append(returns[:, ind])
+                masks_batch.append(masks[:, ind])
+
+                old_action_log_probs_batch.append(action_log_probs[:, ind])
                 adv_targ.append(advantages[:, ind])
 
-            T, N = self.num_steps, num_envs_per_batch
+            T, N = returns.size(0), num_envs_per_batch
             # These are all tensors of size (T, N, -1)
             obs_batch = DictAsTensor.stack(obs_batch, 1)
 
@@ -298,6 +321,38 @@ class RolloutStorageWithDictObs(object):
 
             yield obs_batch, internal_states_batch, actions_batch, \
                 value_preds_batch, return_batch, masks_batch, old_action_log_probs_batch, adv_targ
+
+    def _split_cat(self, seq_tensor, chunk_size):
+        """
+        Splits along first dimension(time_steps) and concats along second(batch_size)
+        """
+        return torch.cat(seq_tensor.split(chunk_size), dim=1)
+
+    @torch.no_grad()
+    def prepare_rollout(self, advantages):
+        num_splits = self.rollout_splits
+
+        obs =               self.obs[:-1]
+        internal_states =   self.internal_states[:-1]
+        actions =           self.actions
+        value_preds =       self.value_preds[:-1]
+        returns =           self.returns[:-1]
+        masks =             self.masks[:-1]
+        action_log_probs =  self.action_log_probs
+        #advantages =       advantages
+
+        if num_splits > 1:
+            chunk_steps = int(self.num_steps / num_splits)
+            obs = obs.split_cat(chunk_steps) #DictAsTensor
+            internal_states = self._split_cat(internal_states, chunk_steps)
+            actions = self._split_cat(actions, chunk_steps)
+            value_preds = self._split_cat(value_preds, chunk_steps)
+            returns = self._split_cat(returns, chunk_steps)
+            masks = self._split_cat(masks, chunk_steps)
+            action_log_probs = self._split_cat(action_log_probs, chunk_steps)
+            advantages = self._split_cat(advantages, chunk_steps)
+
+        return obs, internal_states, actions, value_preds, returns, masks, action_log_probs, advantages
 
 # rollouts.obs[0].copy_(obs)
 # rollouts.to(device)

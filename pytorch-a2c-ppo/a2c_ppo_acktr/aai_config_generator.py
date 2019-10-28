@@ -272,7 +272,7 @@ class RandomizedGenerator(ConfigGeneratorWrapper):
                 if item.name in self.PAINTABLE_OBJECTS:
 
                     n_colors = len(item.colors) #colors specified
-                    n_items = max(n_colors,len(item.positions), len(item.sizes)) #n different items
+                    n_items = max(n_colors,len(item.positions), len(item.sizes)) #number different items
                     for i in range(n_items-n_colors): item.colors.append(RGB(-1,-1,-1))
 
                     for c_id, rgb in enumerate(item.colors):

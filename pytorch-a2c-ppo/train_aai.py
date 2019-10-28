@@ -265,7 +265,8 @@ def main():
     rollouts = create_storage(
         args.num_steps, args.num_processes,
         envs.observation_space, envs.action_space,
-        actor_critic.internal_state_shape
+        actor_critic.internal_state_shape,
+        args.rollout_splits
     )
 
     obs = envs.reset()

@@ -403,15 +403,18 @@ class MetaObs(Preprocessor):
     r_{t-1}, a_{t-1} in the observations dict under keys `r_prev`, `a_prev`.
     """
 
-    def __init__(self,):
+    def __init__(self, one_hot_actions=True):
+        self.one_hot_actions = one_hot_actions
         self.r_prev = None
 
     def init(self, env):
         assert isinstance(env.observation_space, spaces.Dict), "Works only with dict obs space!"
         #update obs space with new observations:
         space = dict(env.observation_space.spaces)
+
         space['r_prev'] = spaces.Box(-6., 6., shape=(1,), dtype=np.float32)
-        space['a_prev'] = spaces.Box(0., 1., shape=(6,), dtype=np.float32)
+        self.action_dim = env.action_space.n if self.one_hot_actions else 6
+        space['a_prev'] = spaces.Box(0., 1., shape=(self.action_dim,), dtype=np.float32)
 
         obs_space = spaces.Dict(space)
 
@@ -422,7 +425,7 @@ class MetaObs(Preprocessor):
 
     def reset(self, obs):
         self.r_prev = np.zeros((1,), dtype=np.float32)
-        obs['a_prev'] = np.zeros((6,), dtype=np.float32)
+        obs['a_prev'] = np.zeros((self.action_dim,), dtype=np.float32)
         obs['r_prev'] = self.r_prev
         return obs
 
@@ -433,12 +436,16 @@ class MetaObs(Preprocessor):
         return obs, r, done, info
 
     def _get_action_repr(self, action):
-        first_id, second_id = action//3, action % 3
-        action_repr = np.zeros((6,), dtype=np.float32)
-        action_repr[first_id] = 1.
-        action_repr[second_id+3] = 1.
-        return action_repr
-
+        if not self.one_hot_actions:
+            first_id, second_id = action//3, action % 3
+            action_repr = np.zeros((self.action_dim,), dtype=np.float32)
+            action_repr[first_id] = 1.
+            action_repr[second_id+3] = 1.
+            return action_repr
+        else:
+            action_repr = np.zeros((self.action_dim,), dtype=np.float32)
+            action_repr[action] = 1.
+            return action_repr
 
 class ObjectClassifier(Preprocessor):
     """
