@@ -199,9 +199,11 @@ class ArenaMaze(object):
             transparent_prob=0.,
             size_error=0.01,
             offset=0.,
+            remove_borders=0, #number of entries in the maze if offset > 0.
             verbose=False,
     ):
         super(ArenaMaze, self).__init__()
+
         off_x, off_z = (offset, offset) if np.isscalar(offset) else offset
         self.X_MIN = self.X_MIN + off_x
         self.X_MAX = self.X_MAX - off_x
@@ -210,6 +212,7 @@ class ArenaMaze(object):
         self.Z_MAX = self.Z_MAX - off_z
         self.arena_len_x = self.X_MAX - self.X_MIN
         self.arena_len_z = self.Z_MAX - self.Z_MIN
+        self.remove_borders = remove_borders
 
         self.x_cells = X
         self.z_cells = Z
@@ -220,6 +223,9 @@ class ArenaMaze(object):
         self.size_error = size_error
 
         self.maze = Maze.generate(X, Z)
+        if self.remove_borders:
+            assert off_x > 0 and off_z > 0
+            self.maze.remove_border_walls(self.remove_borders)
 
         self.cell_len_x = (self.arena_len_x - (self.x_cells - 1) * wall_width) / self.x_cells
         self.cell_len_z = (self.arena_len_z - (self.z_cells - 1) * wall_width) / self.z_cells
@@ -311,6 +317,7 @@ class ArenaMaze(object):
         return (pos_x, pos_z)
 
     def _create_maze_walls(self):
+
         walls = []
         # cycle to create walls:
         for z in range(self.z_cells):
@@ -356,6 +363,7 @@ class ArenaMaze(object):
         #or your maze covers entire arena space
         #if you want to make sure you goal will appear inside the maze use
         # add_fixed_goal
+        if num_goals < 1: return
 
         goals = []
         if num_goals == 1:
@@ -383,18 +391,28 @@ class ArenaMaze(object):
 
     def add_fixed_goal(self, cell, reward, is_multi=False, bounce_prob=0.2):
         "sets goal in inside the specified cell!"
+        if cell[0] < 0 or cell[1] < 0:
+            x, z = cell
+            cells = self.get_empty_cells()
+            cells = [c for c in cells if (x < 0 or c[0] == x) and (z < 0 or c[1] == z)]
+            cell = cells[np.random.choice(len(cells))]
+            print('randomly choose:', cell)
+
         assert cell not in self._occupied_cells, "you can't place agent in the same cell with obstacle"
+
         x_min, z_min = self.top_left_point(*cell, inside_walls=True)
         x_max, z_max = x_min + self.cell_len_x, z_min + self.cell_len_z
 
-        self._occupied_cells.append(cell)
-
+        self._occupied_cells.append(tuple(cell))
+        r_offset = reward/2 if reward > 0. else 2.5
         pos = [
-            (x_min+reward/2., x_max-reward/2.),
+            (x_min+r_offset, x_max-r_offset),
             -1.,
-            (z_min+reward/2., z_max-reward/2.)
+            (z_min+r_offset, z_max-r_offset)
         ]
         self._goals.append(make_goal(reward, pos, is_multi, bounce_prob))
+
+        return cell
 
     def get_empty_cells(self):
         cells = []
@@ -407,7 +425,7 @@ class ArenaMaze(object):
     def add_bad_goals(self, reward, num_goals=1, bounce_prob=0.2, area_delim=-0.01):
         goals = []
         if num_goals == 1:
-            goal = make_goal(reward, bounce_prob=bounce_prob)
+            goal = make_bad_goal(reward, bounce_prob=bounce_prob)
             goals.append(goal)
 
         else:
@@ -448,13 +466,13 @@ class ArenaMaze(object):
             self._obstacles.extend(obstacle_objects)
 
     def _make_ramp(self, cell, is_horizontal):
-        print('add h-ramp' if is_horizontal else 'add v-ramp')
-        min_ramp_length = 2.5
-        max_ramp_width = 5
+        print('add h-ramp' if is_horizontal else 'add v-ramp', "at", cell)
+        min_ramp_length = 2
         max_ramp_height = 3
+        min_ramp_width = 3
         #check if there is enough space for a ramp obstacle:
         min_cell_side = min(self.cell_len_x, self.cell_len_z)
-        assert max_ramp_width < min_cell_side
+        assert min_ramp_width < min_cell_side
         assert min_ramp_length < (min_cell_side-self.wall_width)/2
 
         x,z = cell
@@ -468,25 +486,28 @@ class ArenaMaze(object):
             cell_len, cell_width = self.cell_len_z, self.cell_len_x
 
         length = randomize( (min_ramp_length, (cell_len-self.wall_width)/2) )
-        width =  randomize((1.8, max_ramp_width))
-        height = randomize((1., min(self.wall_height-1, max_ramp_height, length)))
+        width =  randomize((min_ramp_width, cell_width*0.8))
+        height = randomize((1., min(self.wall_height-1, max_ramp_height, length*0.8)))
 
         # x - is a width of a ramp, z is it's length ¯\_(ツ)_/¯
         ramp_size = (width, height, length)
 
-        offset = length / 2 + self.wall_width / 2
+        len_offset = length / 2 + self.wall_width / 2
+        width_offset = (cell_width/2)-(width/2)
 
         if is_horizontal:
             # angle=0 means upward direction is from north->south,  angle=270: west-> east ¯\_(ツ)_/¯
             l_angle = 270
             wall_angle=0
-            l_ramp_pos = (center_x-offset, 0, center_z)
-            r_ramp_pos = (center_x+offset, 0, center_z)
+            z = randomize((center_z-width_offset, center_z+width_offset))
+            l_ramp_pos = (center_x-len_offset, 0, z)
+            r_ramp_pos = (center_x+len_offset, 0, z)
         else:
             l_angle = 180
             wall_angle=90
-            l_ramp_pos = (center_x, 0, center_z-offset)
-            r_ramp_pos = (center_x, 0, center_z+offset)
+            x = randomize((center_x - width_offset, center_x + width_offset))
+            l_ramp_pos = (x, 0, center_z-len_offset)
+            r_ramp_pos = (x, 0, center_z+len_offset)
 
         right_angle = (180 + l_angle)%360
         l_ramp = make_ramp(l_ramp_pos, ramp_size, l_angle, size_error=self.size_error)
@@ -505,8 +526,8 @@ class ArenaMaze(object):
         return  l_ramp, obstacle_wall, r_ramp
 
     def _make_tunnel(self, cell, is_horizontal):
-        print('add h-tunnel' if is_horizontal else 'add v-tunnel')
-        min_tunnel_width = 2.
+        print('add h-tunnel at' if is_horizontal else 'add v-tunnel at', cell)
+        min_tunnel_width = 2.5
         # check if there is enough space for a tunnel obstacle:
         min_cell_side = min(self.cell_len_x, self.cell_len_z)
         assert min_tunnel_width < min_cell_side
@@ -522,8 +543,8 @@ class ArenaMaze(object):
             cell_len, cell_width = self.cell_len_z, self.cell_len_x
 
         length = randomize((self.wall_width+1.,  cell_len))
-        width = randomize((max(2, cell_width/4), cell_width*0.7))
-        height = randomize((3., self.wall_height))
+        width = randomize((max(min_tunnel_width, cell_width/4), cell_width*0.7))
+        height = randomize((3.2, 10))
 
         # x - is a width of a tunnel, z is it's length ¯\_(ツ)_/¯
         tunnel_size = (width, height, length)
@@ -562,15 +583,17 @@ class ArenaMaze(object):
         return tunnel, t_wall, w_wall
 
 
-    def fix_agent_inside_maze(self, cell=None, agent_radius=1.):
-        #i don't know actual radius. this is just an estimate!
-        if cell is None:
-            x_min, x_max = self.X_MIN, self.X_MAX
-            z_min, z_max = self.Z_MIN, self.Z_MAX
-        else:
-            assert cell not in self._occupied_cells, "you can't place agent in the same cell with obstacle"
-            x_min, z_min = self.top_left_point(*cell, inside_walls=True)
-            x_max, z_max = x_min + self.cell_len_x, z_min + self.cell_len_z
+    def fix_agent_inside_maze(self, cell, agent_radius=1.): #i don't know actual radius. this is just an estimate!
+
+        if cell[0] < 0 or cell[1] < 0:
+            x,z = cell
+            cells = self.get_empty_cells()
+            cells = [c for c in cells if (x<0 or c[0] == x) and (z<0 or c[1] == z)]
+            cell = cells[np.random.choice(len(cells))]
+
+        assert cell not in self._occupied_cells, "you can't place agent in the same cell with obstacle"
+        x_min, z_min = self.top_left_point(*cell, inside_walls=True)
+        x_max, z_max = x_min + self.cell_len_x, z_min + self.cell_len_z
 
         pos = [
             (x_min+agent_radius, x_max-agent_radius),
@@ -578,7 +601,10 @@ class ArenaMaze(object):
             (z_min+agent_radius, z_max-agent_radius)
         ]
         self.agent = fix_agent(pos)
+        if self.agent is not None:
+            self._occupied_cells.append(tuple(cell))
 
+        return cell
 
     def build_config(self,T):
         items = []
@@ -598,8 +624,8 @@ def check_position(pos, margin_error=0.01):
     x, y, z = pos
     correct_x = ((0+margin_error) < x < (ARENA_X-margin_error))
     correct_z = ((0+margin_error) < z < (ARENA_Z-margin_error))
-    correct_y = y >= 0.
-    return correct_x and correct_y and correct_z
+    #correct_y = y >= 0.
+    return correct_x and correct_z
 
 
 def ensure_dir(file_path):
@@ -642,7 +668,7 @@ def handle_commandline():
     )
     parser.add_argument(
         '-ng', '--num-goals', type=int, default=2,
-        help="Nuber of goals in maze, if n > 1 then we use gold goals, [default: 2]"
+        help="Number of randomly placed goals in a maze, if n > 1 then we use gold goals, [default: 2]"
     )
     parser.add_argument(
         '-nt', '--num-tunnels', type=int, default=0,
@@ -667,7 +693,35 @@ def handle_commandline():
              "offset=(10.,10.) them maze has size (20x20), covers 1/4 of the arena and is placed in the center."
 
     )
+    parser.add_argument(
+        '-rb', '--remove-border', type=int, default=2,
+        help='Number of border walls to remove. Used only if offset > 0.'
+    )
+
+    parser.add_argument(
+        '-s', '--start', type=int, nargs=2, default=None,
+        help="Coordinates of a staring cell "
+             "If not specified the agent is spawned randomly in any point in the arena. (Default: None)"
+    )
+
+    parser.add_argument(
+        '-f','--finish', type=int, nargs=2, default=None,
+        help="Puts a green goal in a specified cell. --finish is processed independently from --num-goals!"
+    )
+
     args = parser.parse_args()
+    if not all(args.offset):
+        print("--remove-border parameter is ignored when border walls are outside of the arena! What's the point?")
+        args.remove_border=0
+
+    if any(args.offset) and args.remove_border == 0:
+        args.mode = "obstacle-course"# полоса препятствий
+        assert args.start and args.finish, "You are trying to use obstacle-course mode! " \
+                                           "For technical reasons you need to specify --start and --finish !"
+    else:
+        args.mode = "grid-maze"
+
+
     return args
 
 
@@ -679,8 +733,10 @@ if __name__ == "__main__":
     num_bad_goals = 2
 
     name_template = os.path.join(
-        args.save_dir, 'maze-{}x{}-{}.yaml'
+        args.save_dir, '{}-{}x{}-{}g-{}obs-{}{}.yaml'
     )
+
+    use_offset = 'offset-' if any(args.offset) else 'full-'
 
     for i in range(args.mazes):
         print('=== MAZE#{} ==='.format(i + 1))
@@ -690,17 +746,33 @@ if __name__ == "__main__":
             color_prob=args.color_prob,
             transparent_prob=args.transparent_prob,
             offset=args.offset,
+            remove_borders=args.remove_border,
             verbose=True,
         )
+        if args.finish:
+            finish = maze.add_fixed_goal(args.finish, -1., )
+            print("fixed goal at:", finish)
+        if args.start:
+            start = maze.fix_agent_inside_maze(args.start)
+            print("agent starts at:", start)
+
+        if args.mode == "obstacle-course":
+            print('Mode: obstacle-course')
+        else:
+            print('Mode: grid-maze')
 
         maze.add_goals((1.,2.), args.num_goals, bounce_prob=0.2)
         maze.add_bad_goals(1.5, num_bad_goals, 0.2)
 
         obstacles = [args.num_ramps, args.num_tunnels]
-        n_obstacles = len(obstacles) #max(4, len(obstacles))
 
-        maze.add_obstacles(n_obstacles, obstacles)
+        maze.add_obstacles(sum(obstacles), obstacles)
+        n_obstacles = len(maze._occupied_cells) - int(args.start != None) - int(args.finish != None)
+        print("num_obstacles:", n_obstacles)
+
         config = maze.build_config(args.time)
 
-        filename = name_template.format(X, Y, i + 1)
+        n_goals = args.num_goals + int(args.finish != None)
+
+        filename = name_template.format(args.mode, X, Y, n_goals, n_obstacles, use_offset, i + 1)
         save_config(config, filename)

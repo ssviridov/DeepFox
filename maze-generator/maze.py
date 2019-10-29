@@ -1,5 +1,5 @@
-import random
-
+#import random
+import numpy as np
 # Easy to read representation for each cardinal direction.
 N, S, W, E = ('n', 's', 'w', 'e')
 
@@ -216,7 +216,10 @@ class Maze(object):
                 str_connections = ''.join(sorted(connections))
                 # Note we are changing the matrix we are reading. We need to be
                 # careful as to not break the `g` function implementation.
-                matrix[y][x] = Maze.UNICODE_BY_CONNECTIONS[str_connections]
+                unicode = Maze.UNICODE_BY_CONNECTIONS.get(str_connections, " ")
+                if unicode is " ":
+                    print('no unicode for: "{}",(len={})'.format(str_connections, len(str_connections)))
+                matrix[y][x] = unicode
 
         # Simple double join to transform list of lists into string.
         return '\n'.join(''.join(line) for line in matrix) + '\n'
@@ -228,13 +231,13 @@ class Maze(object):
         Algorithm from http://mazeworks.com/mazegen/mazetut/index.htm
         """
         cell_stack = []
-        cell = random.choice(self.cells)
+        cell = np.random.choice(self.cells)
         n_visited_cells = 1
 
         while n_visited_cells < len(self.cells):
             neighbors = [c for c in self.neighbors(cell) if c.is_full()]
             if len(neighbors):
-                neighbor = random.choice(neighbors)
+                neighbor = np.random.choice(neighbors)
                 cell.connect(neighbor)
                 cell_stack.append(cell)
                 cell = neighbor
@@ -261,6 +264,29 @@ class Maze(object):
                     cells.append((x, z))
 
         return cells
+
+    def get_border_walls(self):
+        walls = [] #[(x,z,direction), ...]
+        for x in range(self.width):
+            for z in range(self.height):
+                if z == 0:
+                    walls.append((x, z, N))
+                if z == self.height-1:
+                    walls.append((x, z, S))
+                if x == 0:
+                    walls.append((x, z, W))
+                if x == self.width-1:
+                    walls.append((x, z, E))
+        return walls
+
+    def remove_border_walls(self, n):
+        walls = self.get_border_walls()
+
+        remove = np.random.choice(len(walls), n, replace=False)
+        remove = [walls[r] for r in remove]
+
+        for x, z, d in remove:
+            self[x,z].walls.remove(d)
 
     def no_corner_cells(self):
         conditions = ("ns", "ew", 'n', "s", "e", "w")

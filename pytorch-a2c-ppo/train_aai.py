@@ -185,6 +185,7 @@ def main():
         oracle_reward=args.oracle_reward,
         num_angles=args.oracle_num_angles,
         cell_side=args.oracle_cell_side,
+        #decay_steps=args
         # trace_decay=0.992, # randomly
     )
     args.classifier_args = None
@@ -219,13 +220,13 @@ def main():
             base=network_class,
             base_kwargs=args.base_network_args
         )
+        updates_done = -1
 
     else:
         print("Loading model...")
         data = torch.load(args.restart)
         actor_critic = data['model']
         updates_done = data['num_updates']
-        args.total_updates = int((args.total_updates - updates_done)*args.num_steps*args.num_processes) // steps_per_update
 
     actor_critic.to(device)
     args.network_architecture = repr(actor_critic)
@@ -252,12 +253,9 @@ def main():
             eps=args.eps,
             max_grad_norm=args.max_grad_norm)
 
-    elif args.algo == 'acktr':
-        agent = algo.A2C_ACKTR(
-            actor_critic,
-            args.value_loss_coef,
-            args.entropy_coef,
-            acktr=True)
+    else:
+        raise NotImplementedError()
+
 
     if args.restart and (data['optim'] is not None):
         agent.optimizer.load_state_dict(data['optim'])
@@ -289,7 +287,7 @@ def main():
     model_saver = DummySaver(args)
     summary = SummaryWriter(args.summary_dir)
     try:
-        for curr_update in range(args.total_updates):
+        for curr_update in range(updates_done+1, args.total_updates):
 
             loop_start_time = time.time()
             if args.use_linear_lr_decay:
@@ -349,17 +347,14 @@ def main():
 
             rollouts.after_update()
 
-            if args.restart:
-                curr_update_old = curr_update
-                curr_update = curr_update + updates_done
+            #steps in current run(see args.restart):
+            curr_run_steps = (curr_update - updates_done)* args.num_processes * args.num_steps
 
             curr_steps = (curr_update + 1) * args.num_processes * args.num_steps
 
             if curr_update % args.log_interval == 0 and len(episode_rewards):
-                if args.restart:
-                    fps = int(((curr_update_old + 1) * args.num_processes * args.num_steps)/(time.time()-start_time))
-                else:
-                    fps = int(curr_steps/(time.time()-start_time))
+                fps = int(curr_run_steps/(time.time()-start_time))
+
                 log_progress(
                     summary, curr_update, curr_steps,
                     episode_rewards, episode_scaled_rewards, episode_success, episode_len,

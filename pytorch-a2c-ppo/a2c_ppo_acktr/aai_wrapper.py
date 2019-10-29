@@ -184,7 +184,7 @@ class AnimalAIWrapper(gym.Env):
                 "episode_reward": float(self.ep_reward),
                 'episode_success': r > 0.4,
                 'episode_len': int(self.t),
-            } #, "config":self.config}
+            }#, "config":self.config}
         else:
             return dict()
 
@@ -327,7 +327,6 @@ def make_vec_envs_aai(
     if num_frame_stack is not None:
         #VecHistoryFrameStack - stacks all observations in dict along a new dimention
         #envs = VecHistoryFrameStack(envs, num_frame_stack, device)
-
         if isinstance(envs.observation_space, gym.spaces.Box):
             envs = VecPyTorchFrameStack(envs, num_frame_stack, device)
         else:

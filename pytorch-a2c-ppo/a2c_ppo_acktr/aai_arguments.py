@@ -254,6 +254,7 @@ def get_args():
         config_path = ospath.dirname(args.restart)
         with open(config_path + '/train_args.json', 'r') as f:
             config = json.load(f)
+        config['restart'] = args.restart
         for k, v in config.items():
             d[k] = v
 
