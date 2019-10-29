@@ -1,0 +1,629 @@
+!ArenaConfig
+arenas:
+  0: !Arena
+    blackouts: []
+    items:
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 26.5
+        y: 0.0
+        z: 6.0
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 5.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 20.0
+        y: 0.0
+        z: 2.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 11.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 13.5
+        y: 0.0
+        z: 6.0
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 5.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 26.5
+        y: 0.0
+        z: 13.0
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 5.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 13.5
+        y: 0.0
+        z: 13.0
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 5.99
+    - !Item
+      colors:
+      - !RGB
+        b: -1
+        g: -1
+        r: -1
+      name: Wall
+      positions:
+      - !Vector3
+        x: 26.5
+        y: 0.0
+        z: 20.0
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 5.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 13.5
+        y: 0.0
+        z: 20.0
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 5.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 26.5
+        y: 0.0
+        z: 27.0
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 5.99
+    - !Item
+      colors:
+      - !RGB
+        b: -1
+        g: -1
+        r: -1
+      name: Wall
+      positions:
+      - !Vector3
+        x: 13.5
+        y: 0.0
+        z: 27.0
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 5.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 26.5
+        y: 0.0
+        z: 34.0
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 5.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 20.0
+        y: 0.0
+        z: 37.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 11.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: WallTransparent
+      positions:
+      - !Vector3
+        x: 13.5
+        y: 0.0
+        z: 34.0
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 5.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 13.5
+        y: 0.0
+        z: 2.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: -1
+        g: -1
+        r: -1
+      name: Wall
+      positions:
+      - !Vector3
+        x: 13.5
+        y: 0.0
+        z: 9.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 26.5
+        y: 0.0
+        z: 9.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: -1
+        g: -1
+        r: -1
+      name: Wall
+      positions:
+      - !Vector3
+        x: 13.5
+        y: 0.0
+        z: 16.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 26.5
+        y: 0.0
+        z: 16.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 13.5
+        y: 0.0
+        z: 23.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 26.5
+        y: 0.0
+        z: 23.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 13.5
+        y: 0.0
+        z: 30.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 26.5
+        y: 0.0
+        z: 30.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 26.5
+        y: 0.0
+        z: 37.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 13.5
+        y: 0.0
+        z: 37.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 26.5
+        y: 0.0
+        z: 2.5
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 3.99
+        z: 0.99
+    - !Item
+      colors:
+      - !RGB
+        b: 255
+        g: 0
+        r: 255
+      name: Ramp
+      positions:
+      - !Vector3
+        x: 21.890070747926053
+        y: 0
+        z: 11.37819275375967
+      rotations:
+      - 180
+      sizes:
+      - !Vector3
+        x: 5.662726530749534
+        y: 1.0892248696506768
+        z: 2.2336144924806614
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 20.0
+        y: 0.0
+        z: 13.0
+      rotations:
+      - 90
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 1.0892248696506768
+        z: 11.99
+    - !Item
+      colors:
+      - !RGB
+        b: 255
+        g: 0
+        r: 255
+      name: Ramp
+      positions:
+      - !Vector3
+        x: 21.890070747926053
+        y: 0
+        z: 14.62180724624033
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 5.662726530749534
+        y: 1.0892248696506768
+        z: 2.2336144924806614
+    - !Item
+      colors:
+      - !RGB
+        b: 255
+        g: 0
+        r: 255
+      name: Ramp
+      positions:
+      - !Vector3
+        x: 22.456393456885017
+        y: 0
+        z: 25.25370834627645
+      rotations:
+      - 180
+      sizes:
+      - !Vector3
+        x: 4.132844299352789
+        y: 1.190929470230132
+        z: 2.4825833074470998
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 20.0
+        y: 0.0
+        z: 27.0
+      rotations:
+      - 90
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 1.190929470230132
+        z: 11.99
+    - !Item
+      colors:
+      - !RGB
+        b: 255
+        g: 0
+        r: 255
+      name: Ramp
+      positions:
+      - !Vector3
+        x: 22.456393456885017
+        y: 0
+        z: 28.74629165372355
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 4.132844299352789
+        y: 1.190929470230132
+        z: 2.4825833074470998
+    - !Item
+      colors: []
+      name: GoodGoal
+      positions:
+      - !Vector3
+        x: 21.21642937188384
+        y: -1.0
+        z: 5.796773826241281
+      rotations: []
+      sizes:
+      - !Vector3
+        x: -1.0
+        y: -1.0
+        z: -1.0
+    - !Item
+      colors: []
+      name: BadGoal
+      positions:
+      - !Vector3
+        x: 16.816071543091578
+        y: -1
+        z: -1
+      rotations: []
+      sizes:
+      - !Vector3
+        x: 1.5
+        y: 1.5
+        z: 1.5
+    - !Item
+      colors: []
+      name: BadGoalBounce
+      positions:
+      - !Vector3
+        x: 24.982035882293985
+        y: -1
+        z: -1
+      rotations: []
+      sizes:
+      - !Vector3
+        x: 1.5
+        y: 1.5
+        z: 1.5
+    - !Item
+      colors: []
+      name: Agent
+      positions:
+      - !Vector3
+        x: 18.223122245271448
+        y: -1.0
+        z: 19.725686482594796
+      rotations:
+      - -1
+      sizes: []
+    t: 1000

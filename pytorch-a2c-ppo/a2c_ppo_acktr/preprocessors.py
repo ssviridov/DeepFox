@@ -266,7 +266,8 @@ class GridOracleWithAngles(Preprocessor):
             revisit_threshold=0.01,
             exploration_only=False,
             grid_side=None,
-
+            oracle_reward_final=None,
+            total_steps=None
     ):
         #assert oracle_reward >= 0., \
         #    "oracle_reward is non-negative! Use `penalty_mode=True` " \
@@ -276,6 +277,13 @@ class GridOracleWithAngles(Preprocessor):
         self.oracle_r = np.abs(oracle_reward)
         self.cell_side = cell_side
         self.angle_box = self.ANGLE_RANGE/num_angles
+        self.curr_step = 0
+        self.oracle_r_final = oracle_reward_final
+
+        if self.oracle_r_final is not None:
+            assert total_steps is not None
+            self.total_steps = total_steps
+            self.delta_r = (self.oracle_r - self.oracle_r_final)/self.total_steps
 
         self.penalty_mode = (oracle_reward <= 0.0)
         self.exploration_only = exploration_only
@@ -336,6 +344,7 @@ class GridOracleWithAngles(Preprocessor):
         else:
             r = r + expl_r
 
+        self.curr_step += 1
         #print('visited != 0: ', (self._visited > 0.).sum(),
         #      'num_visited:', self.num_visited,
         #      "visited now: ", (self._visited > 0.5).sum(),)
@@ -379,18 +388,26 @@ class GridOracleWithAngles(Preprocessor):
         info['grid_oracle'] = grid_info
 
     def _visit(self, angle, x, z):
+        if self.oracle_r_final is not None:
+            if self.curr_step > self.total_steps:
+                curr_oracle_r = self.oracle_r_final
+            else:
+                curr_oracle_r = self.oracle_r - self.delta_r*self.curr_step
+
+        else:
+            curr_oracle_r = self.oracle_r
+
         angle += self.start_angle
         x += self.start_x
         z += self.start_z
         r = 0.
 
         if self._visited[angle, x, z] < self.revisit_threshold:
-            oracle_r = self.oracle_r
+            r += curr_oracle_r  # reward for visiting new state
             #oracle_r = self.oracle_r*(self.grid_size[0] - sum(self._visited[:, x, z] != 0.) / self.grid_size[0])
-            r += oracle_r  # reward for visiting new state
 
         if self.penalty_mode:  # (+oracle_r or 0.) becomes a (0. or -oracle_r)
-            r -= self.oracle_r
+            r -= curr_oracle_r
 
         self.num_visited += (self._visited[angle, x, z] <= 0.)
         self._visited[angle, x, z] = 1.

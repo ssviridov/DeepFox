@@ -185,6 +185,8 @@ def main():
         oracle_reward=args.oracle_reward,
         num_angles=args.oracle_num_angles,
         cell_side=args.oracle_cell_side,
+        total_steps=(args.num_env_steps)/args.num_processes, # total_steps for each environment=total_steps/num_envs
+        oracle_reward_final=args.oracle_reward_final,
         #decay_steps=args
         # trace_decay=0.992, # randomly
     )

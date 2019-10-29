@@ -75,8 +75,12 @@ def get_args():
         help=" If reward > 0 then agents gets this reward when it visits grid cell,"
              " otherwise it is a penalty given to the agent when it stays in the visited"
              " cell for more than one step. (default: -1./100)"
-        )
-
+    )
+    parser.add_argument(
+        "--oracle-reward-final", "-orf", default=None, type=float,
+        help=" If specified then linear schedule is used to decrease from oracle-reward to oracle-reward-final."
+             " (default: None)"
+    )
     #OBJECT-CLASSIFIER arguments:
     #these arguments count only if you have objects in --extra-obs
     parser.add_argument(
