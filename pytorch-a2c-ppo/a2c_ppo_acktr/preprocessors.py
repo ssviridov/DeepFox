@@ -422,7 +422,7 @@ class MetaObs(Preprocessor):
 
     def __init__(self, one_hot_actions=True, num_actions=None):
         self.one_hot_actions = one_hot_actions
-        if num_actions :
+        if num_actions or one_hot_actions == False:
             self.action_dim = num_actions if self.one_hot_actions else 6
         self.r_prev = None
 
@@ -432,7 +432,7 @@ class MetaObs(Preprocessor):
         space = dict(env.observation_space.spaces)
 
         space['r_prev'] = spaces.Box(-6., 6., shape=(1,), dtype=np.float32)
-        if self.action_dim is None:
+        if not hasattr(self, "action_dim"):
             self.action_dim = env.action_space.n if self.one_hot_actions else 6
         space['a_prev'] = spaces.Box(0., 1., shape=(self.action_dim,), dtype=np.float32)
 
