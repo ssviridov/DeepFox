@@ -1,0 +1,119 @@
+!ArenaConfig
+arenas:
+  0: !Arena
+    blackouts: []
+    items:
+    - !Item
+      colors:
+      - !RGB
+        b: 255
+        g: 0
+        r: 255
+      name: Ramp
+      positions:
+      - !Vector3
+        x: 7.956242651017648
+        y: 0
+        z: 16.756305091430836
+      rotations:
+      - 180
+      sizes:
+      - !Vector3
+        x: 15.309446290216595
+        y: 1.6142360831392097
+        z: 5.477389817138329
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 20.0
+        y: 0.0
+        z: 20.0
+      rotations:
+      - 90
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 1.6142360831392097
+        z: 39.99
+    - !Item
+      colors:
+      - !RGB
+        b: 255
+        g: 0
+        r: 255
+      name: Ramp
+      positions:
+      - !Vector3
+        x: 7.956242651017648
+        y: 0
+        z: 23.243694908569164
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 15.309446290216595
+        y: 1.6142360831392097
+        z: 5.477389817138329
+    - !Item
+      colors: []
+      name: GoodGoalMulti
+      positions:
+      - !Vector3
+        x: -1
+        y: -1
+        z: 8.925388210575315
+      rotations: []
+      sizes:
+      - !Vector3
+        x: 1.7389464732068913
+        y: 1.7389464732068913
+        z: 1.7389464732068913
+    - !Item
+      colors: []
+      name: GoodGoalMulti
+      positions:
+      - !Vector3
+        x: -1
+        y: -1
+        z: 33.972593365345006
+      rotations: []
+      sizes:
+      - !Vector3
+        x: 3.4095187281806565
+        y: 3.4095187281806565
+        z: 3.4095187281806565
+    - !Item
+      colors: []
+      name: BadGoal
+      positions:
+      - !Vector3
+        x: 0.03025191551075189
+        y: -1
+        z: -1
+      rotations: []
+      sizes:
+      - !Vector3
+        x: 1.5
+        y: 1.5
+        z: 1.5
+    - !Item
+      colors: []
+      name: BadGoalBounce
+      positions:
+      - !Vector3
+        x: 28.39365203198365
+        y: -1
+        z: -1
+      rotations: []
+      sizes:
+      - !Vector3
+        x: 1.5
+        y: 1.5
+        z: 1.5
+    t: 500

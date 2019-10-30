@@ -11,8 +11,8 @@ import cv2
 from a2c_ppo_acktr.preprocessors import ObjectClassifier
 
 aai_path = "aai_resources/env/AnimalAI"
-config_path = "../maze-generator/full/"#"aai_resources/asorokin/"
-config_path = config_path + "1x3-obst" #/5_walls/5_walls_gold.yaml"
+config_path = "../maze-generator/closed/"#"aai_resources/asorokin/"
+config_path = config_path + "3x4-obs" #/5_walls/5_walls_gold.yaml"
 
 
 def get_config_name(env_aai):

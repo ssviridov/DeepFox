@@ -527,7 +527,7 @@ class ArenaMaze(object):
 
     def _make_tunnel(self, cell, is_horizontal):
         print('add h-tunnel at' if is_horizontal else 'add v-tunnel at', cell)
-        min_tunnel_width = 2.5
+        min_tunnel_width = 2.6
         # check if there is enough space for a tunnel obstacle:
         min_cell_side = min(self.cell_len_x, self.cell_len_z)
         assert min_tunnel_width < min_cell_side
@@ -543,8 +543,10 @@ class ArenaMaze(object):
             cell_len, cell_width = self.cell_len_z, self.cell_len_x
 
         length = randomize((self.wall_width+1.,  cell_len))
-        width = randomize((max(min_tunnel_width, cell_width/4), cell_width*0.7))
-        height = randomize((max(0.33*width,3.2), max(10, 0.8*width)))
+        width = randomize((
+            max(min_tunnel_width, cell_width/6), min(cell_width*0.8,10.)
+        ))
+        height = randomize((max(0.33*width,3.2), max(4., 0.8*width)))
 
         # x - is a width of a tunnel, z is it's length ¯\_(ツ)_/¯
         tunnel_size = (width, height, length)
