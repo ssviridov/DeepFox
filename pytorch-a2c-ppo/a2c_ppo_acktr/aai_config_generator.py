@@ -287,4 +287,73 @@ class RandomizedGenerator(ConfigGeneratorWrapper):
         return config_dict
 
 
+class ConfigMerger(ConfigGenerator):
+    """
+    Takes list of config generators and list with their respective probabilities.
+    """
+
+    def __init__(self, config_generators, probs):
+        assert sum(probs) == 1, "Probabilities must sum to 1"
+        self.config_generators = config_generators
+        self.probs = probs
+
+    def next_config(self, *args, **kwargs):
+        gen = np.random.choice(self.config_generators, p=self.probs)
+        return gen.next_config(*args, **kwargs)
+
+    def shuffle(self):
+        pass
+
+
+class Curriculum(ConfigGenerator):
+    @classmethod
+    def create_from_dir(cls, config_dir):
+        dir_dict = defaultdict(dict)
+        dirs = glob(config_dir+'/*/')
+        for name in dirs:
+            config_files = [f for f in pathlib.Path(name).glob("**/*.yaml")]
+            file_dict = dict()
+            for file in config_files:
+                config = ArenaConfig(file)
+                file_dict[file] = config
+            dir_dict[name] = file_dict
+        return cls(dir_dict)
+
+    def __init__(self, folders2configs, threshold=0.5, que_size=100):
+        self._configs = folders2configs
+        self._folders = sorted(list(folders2configs.keys()))
+        probs = [0.7 if fnmatch.fnmatch(key, "Level_1") else 0 for key in self._folders]
+        probs = np.array([0.7 * (0.2 ** abs(i)) for i in range(len(probs))])
+        self._probs = probs/sum(probs)
+        assert sum(self._probs) == 1, "probabilities must sum to 1"
+        self._current_level_name = self._folders[0]
+        self._threshold = threshold
+        self._que_size = que_size
+        self.queues = [deque(maxlen=que_size)] * len(self._folders)
+
+    def shuffle(self):
+        pass
+
+    def next_config(self, config_name=None, success=0):
+        print(config_name)
+        print(success)
+        if config_name in self._folders:
+            self.queues[self._folders.index(config_name)].append(success)
+            successes = self.queues[self._folders.index(config_name)]
+            if len(successes) >= self._que_size:
+                if np.mean(successes) > self._threshold:
+                    self._current_level_name = self._current_level_name[:-2] + str(int(self._current_level_name[-2]) + 1) + "/"
+                else:
+                    self._current_level_name = self._current_level_name[:-2] + str(int(self._current_level_name[-2]) - 1) + "/"
+                ind = self._folders.index(self._current_level_name)
+                self._probs[ind] = 0.7
+                new_probs = np.array([0.7*(0.2**abs(i-ind)) for i in range(len(self._probs))])
+                self._probs = new_probs/sum(new_probs)
+                assert sum(self._probs) == 1, "probabilities must sum to 1"
+        print(self._folders)
+        print(self._probs)
+        folder = np.random.choice(self._folders, p=self._probs)
+        config = np.random.choice(list(self._configs[folder].keys()))
+        return {'config':self._configs[folder][config], "config_name":folder}
+
 
