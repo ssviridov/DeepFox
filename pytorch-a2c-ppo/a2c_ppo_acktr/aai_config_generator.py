@@ -5,6 +5,7 @@ import os.path
 from animalai.envs.arena_config import ArenaConfig, RGB, Item
 import logging
 import copy
+from collections import deque
 
 class ConfigGenerator(object):
     """
@@ -329,7 +330,7 @@ class Curriculum(ConfigGenerator):
         self._current_level_index = 0
         self._threshold = threshold
         self._que_size = que_size
-        self.queues = [deque(maxlen=que_size)] * len(self._folders)
+        self.queues = [deque(maxlen=que_size) for _ in range(len(self._folders))]
 
     def shuffle(self):
         pass
