@@ -17,10 +17,11 @@ observation_adapter:
     stackables: ["image"]
 
     grid_oracle:
-        oracle_type: "angles" #map with angle dimension as image channel if True
         cell_side: 2.0
         num_angles: 15
         oracle_reward: -0.01
         #penalty_mode: True
         #trace_decay: 0.999
         #exploration_only: False
+    meta_obs:
+        one_hot_actions: False

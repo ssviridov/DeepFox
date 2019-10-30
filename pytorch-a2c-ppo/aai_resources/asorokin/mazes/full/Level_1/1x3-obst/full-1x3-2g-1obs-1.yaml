@@ -1,0 +1,119 @@
+!ArenaConfig
+arenas:
+  0: !Arena
+    blackouts: []
+    items:
+    - !Item
+      colors:
+      - !RGB
+        b: 255
+        g: 0
+        r: 255
+      name: Ramp
+      positions:
+      - !Vector3
+        x: 7.098076595848042
+        y: 0
+        z: 17.09059787654921
+      rotations:
+      - 180
+      sizes:
+      - !Vector3
+        x: 13.8134980125297
+        y: 2.0270037806331045
+        z: 4.80880424690158
+    - !Item
+      colors:
+      - !RGB
+        b: 153
+        g: 153
+        r: 153
+      name: Wall
+      positions:
+      - !Vector3
+        x: 20.0
+        y: 0.0
+        z: 20.0
+      rotations:
+      - 90
+      sizes:
+      - !Vector3
+        x: 0.99
+        y: 2.0270037806331045
+        z: 39.99
+    - !Item
+      colors:
+      - !RGB
+        b: 255
+        g: 0
+        r: 255
+      name: Ramp
+      positions:
+      - !Vector3
+        x: 7.098076595848042
+        y: 0
+        z: 22.90940212345079
+      rotations:
+      - 0
+      sizes:
+      - !Vector3
+        x: 13.8134980125297
+        y: 2.0270037806331045
+        z: 4.80880424690158
+    - !Item
+      colors: []
+      name: GoodGoalMulti
+      positions:
+      - !Vector3
+        x: -1
+        y: -1
+        z: 5.426691971183224
+      rotations: []
+      sizes:
+      - !Vector3
+        x: 1.394966412283334
+        y: 1.394966412283334
+        z: 1.394966412283334
+    - !Item
+      colors: []
+      name: GoodGoalMulti
+      positions:
+      - !Vector3
+        x: -1
+        y: -1
+        z: 25.49994763262967
+      rotations: []
+      sizes:
+      - !Vector3
+        x: 2.3989574797616244
+        y: 2.3989574797616244
+        z: 2.3989574797616244
+    - !Item
+      colors: []
+      name: BadGoal
+      positions:
+      - !Vector3
+        x: 5.630019065695675
+        y: -1
+        z: -1
+      rotations: []
+      sizes:
+      - !Vector3
+        x: 1.5
+        y: 1.5
+        z: 1.5
+    - !Item
+      colors: []
+      name: BadGoal
+      positions:
+      - !Vector3
+        x: 29.140933364877984
+        y: -1
+        z: -1
+      rotations: []
+      sizes:
+      - !Vector3
+        x: 1.5
+        y: 1.5
+        z: 1.5
+    t: 500
