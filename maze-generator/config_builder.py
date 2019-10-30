@@ -357,7 +357,7 @@ class ArenaMaze(object):
 
         return walls
 
-    def add_goals(self, reward, num_goals=1, bounce_prob=0.2, area_delim=None):
+    def add_rnd_goals(self, reward, num_goals=1, bounce_prob=0.2, area_delim=None):
         #these goals are not garantied to appear inside the maze.
         #so make sure you either have removed some outer maze walls
         #or your maze covers entire arena space
@@ -544,7 +544,7 @@ class ArenaMaze(object):
 
         length = randomize((self.wall_width+1.,  cell_len))
         width = randomize((max(min_tunnel_width, cell_width/4), cell_width*0.7))
-        height = randomize((3.2, 10))
+        height = randomize((max(0.33*width,3.2), max(10, 0.8*width)))
 
         # x - is a width of a tunnel, z is it's length ¯\_(ツ)_/¯
         tunnel_size = (width, height, length)
@@ -655,8 +655,8 @@ def handle_commandline():
         help='where to save newly generated mazes'
     )
     parser.add_argument(
-        '-m', '--mazes', type=int, default=5,
-        help='Number of mazes to create [default: 5]')
+        '-m', '--mazes', type=int, nargs=2, default=(1,5),
+        help='Range to generate mazes. For "-m 1 5" will generate five mazes: name-1.yaml, name-2.yaml, ..., name-5.yaml [default: 5]')
     parser.add_argument(
         '-t', '--time', type=int,
         default=500,
@@ -667,7 +667,7 @@ def handle_commandline():
         help="Desired number of ramps in a maze [default: 2]"
     )
     parser.add_argument(
-        '-ng', '--num-goals', type=int, default=2,
+        '-rg', '--random-goals', type=int, default=2,
         help="Number of randomly placed goals in a maze, if n > 1 then we use gold goals, [default: 2]"
     )
     parser.add_argument(
@@ -705,8 +705,9 @@ def handle_commandline():
     )
 
     parser.add_argument(
-        '-f','--finish', type=int, nargs=2, default=None,
-        help="Puts a green goal in a specified cell. --finish is processed independently from --num-goals!"
+        '-fg','--fixed-goals', type=int, nargs='+', default=None,
+        help="Puts a goal in a specified cell. if you specified more than one pair of coords then gold goals are used. "
+             "--finish is processed independently from --num-goals!"
     )
 
     args = parser.parse_args()
@@ -715,12 +716,26 @@ def handle_commandline():
         args.remove_border=0
 
     if any(args.offset) and args.remove_border == 0:
-        args.mode = "obstacle-course"# полоса препятствий
-        assert args.start and args.finish, "You are trying to use obstacle-course mode! " \
+        args.mode = "closed"# полоса препятствий
+        assert args.start and args.fixed_goals, "You are trying to use closed-offset mode! " \
                                            "For technical reasons you need to specify --start and --finish !"
+        if len(args.fixed_goals) > 2 and args.random_goals > 0:
+            raise ValueError(
+            "In closed-offset mode you need to be sure, "
+            "that either there is a green goal inside the maze "
+            "or there are no golden goals outside!"
+            )
+    elif any(args.offset):
+        args.mode = "open"
     else:
-        args.mode = "grid-maze"
+        args.mode = 'full'
 
+    assert len(args.fixed_goals)%2 == 0,"--finish receives coordinates of targets, there should be an even number of coordiantes"
+    if args.fixed_goals:
+        args.fixed_goals = [(args.fixed_goals[i], args.fixed_goals[i+1])
+                            for i in range(0, len(args.fixed_goals), 2)]
+    else:
+        args.fixed_goals = []
 
     return args
 
@@ -733,13 +748,13 @@ if __name__ == "__main__":
     num_bad_goals = 2
 
     name_template = os.path.join(
-        args.save_dir, '{}-{}x{}-{}g-{}obs-{}{}.yaml'
+        args.save_dir, '{}-{}x{}-{}g-{}obs-{}.yaml'
     )
 
-    use_offset = 'offset-' if any(args.offset) else 'full-'
-
-    for i in range(args.mazes):
-        print('=== MAZE#{} ==='.format(i + 1))
+    start_id, end_id = args.mazes
+    for i in range(start_id, end_id+1):
+        n_goals = 0
+        print('=== MAZE#{} ==='.format(i))
         maze = ArenaMaze(
             X,Y,
             wall_height=4.,
@@ -749,30 +764,31 @@ if __name__ == "__main__":
             remove_borders=args.remove_border,
             verbose=True,
         )
-        if args.finish:
-            finish = maze.add_fixed_goal(args.finish, -1., )
-            print("fixed goal at:", finish)
+
+        for goal_cell in args.fixed_goals:
+            is_multi = len(args.fixed_goals) > 1
+            true_cell = maze.add_fixed_goal(goal_cell, -1., is_multi)
+            print("fixed goal at:", true_cell)
+
         if args.start:
             start = maze.fix_agent_inside_maze(args.start)
             print("agent starts at:", start)
 
-        if args.mode == "obstacle-course":
-            print('Mode: obstacle-course')
-        else:
-            print('Mode: grid-maze')
 
-        maze.add_goals((1.,2.), args.num_goals, bounce_prob=0.2)
+        print('Mode:', args.mode)
+
+        maze.add_rnd_goals((1., 3.5), args.random_goals, bounce_prob=0.2)
         maze.add_bad_goals(1.5, num_bad_goals, 0.2)
 
         obstacles = [args.num_ramps, args.num_tunnels]
 
         maze.add_obstacles(sum(obstacles), obstacles)
-        n_obstacles = len(maze._occupied_cells) - int(args.start != None) - int(args.finish != None)
+        n_obstacles = len(maze._occupied_cells) - int(args.start != None) - len(args.fixed_goals)
         print("num_obstacles:", n_obstacles)
 
         config = maze.build_config(args.time)
 
-        n_goals = args.num_goals + int(args.finish != None)
+        n_goals = args.random_goals + len(args.fixed_goals)
 
-        filename = name_template.format(args.mode, X, Y, n_goals, n_obstacles, use_offset, i + 1)
+        filename = name_template.format(args.mode, X, Y, n_goals, n_obstacles, i)
         save_config(config, filename)
