@@ -5,7 +5,9 @@ import os.path
 from animalai.envs.arena_config import ArenaConfig, RGB, Item
 import logging
 import copy
-from collections import deque
+from collections import deque, defaultdict
+from glob import glob
+import fnmatch
 
 class ConfigGenerator(object):
     """
@@ -326,7 +328,6 @@ class Curriculum(ConfigGenerator):
         probs = [0.7 if fnmatch.fnmatch(key, "Level_1") else 0 for key in self._folders]
         probs = np.array([0.7 * (0.2 ** abs(i)) for i in range(len(probs))])
         self._probs = probs/sum(probs)
-        assert sum(self._probs) == 1, "probabilities must sum to 1"
         self._current_level_index = 0
         self._threshold = threshold
         self._que_size = que_size
@@ -336,8 +337,6 @@ class Curriculum(ConfigGenerator):
         pass
 
     def next_config(self, config_name=None, success=0):
-        print(config_name)
-        print(success)
         if config_name in self._folders:
             self.queues[self._folders.index(config_name)].append(success)
             successes = self.queues[self._folders.index(config_name)]
@@ -355,9 +354,7 @@ class Curriculum(ConfigGenerator):
                 self._probs[self._current_level_index] = 0.7
                 new_probs = np.array([0.7*(0.2**abs(i-self._current_level_index)) for i in range(len(self._probs))])
                 self._probs = new_probs/sum(new_probs)
-                assert sum(self._probs) == 1, "probabilities must sum to 1"
-        print(self._folders)
-        print(self._probs)
+
         folder = np.random.choice(self._folders, p=self._probs)
         config = np.random.choice(list(self._configs[folder].keys()))
         return {'config':self._configs[folder][config], "config_name":folder}
