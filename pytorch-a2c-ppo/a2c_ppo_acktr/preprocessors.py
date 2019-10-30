@@ -420,8 +420,10 @@ class MetaObs(Preprocessor):
     r_{t-1}, a_{t-1} in the observations dict under keys `r_prev`, `a_prev`.
     """
 
-    def __init__(self, one_hot_actions=True):
+    def __init__(self, one_hot_actions=True, num_actions=None):
         self.one_hot_actions = one_hot_actions
+        if num_actions :
+            self.action_dim = num_actions if self.one_hot_actions else 6
         self.r_prev = None
 
     def init(self, env):
@@ -430,7 +432,8 @@ class MetaObs(Preprocessor):
         space = dict(env.observation_space.spaces)
 
         space['r_prev'] = spaces.Box(-6., 6., shape=(1,), dtype=np.float32)
-        self.action_dim = env.action_space.n if self.one_hot_actions else 6
+        if self.action_dim is None:
+            self.action_dim = env.action_space.n if self.one_hot_actions else 6
         space['a_prev'] = spaces.Box(0., 1., shape=(self.action_dim,), dtype=np.float32)
 
         obs_space = spaces.Dict(space)

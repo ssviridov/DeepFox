@@ -74,7 +74,8 @@ class PPO():
                     value_loss = 0.5 * torch.max(value_losses,
                                                  value_losses_clipped).mean()
                 else:
-                    value_loss = 0.5 * (return_batch - values).pow(2).mean()
+                    # 0.5 * (return_batch - values).pow(2).mean()
+                    value_loss = 0.5 * (return_batch - values).pow(2).mean() #0.5 * F.smooth_l1_loss(values,return_batch)
 
                 self.optimizer.zero_grad()
                 (value_loss * self.value_loss_coef + action_loss -

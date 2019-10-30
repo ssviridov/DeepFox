@@ -116,21 +116,12 @@ class ObservationAdapter(object):
 class ExtraObsAdapter(ObservationAdapter):
 
     def __init__(self, *args, **kwargs):
-        oracle_args = kwargs.pop("grid_oracle", {})
-        oracle_type = oracle_args.pop("oracle_type")
 
-        if oracle_type == "angles":
-            grid_oracle = GridOracleWithAngles(
-                **oracle_args
-            )
-        elif oracle_type == "3d":
-            grid_oracle= GridOracle(
-                **oracle_args
-            )
-        else:
-            raise NotImplementedError()
+        grid_oracle = GridOracleWithAngles( **kwargs.pop("grid_oracle", {}) )
 
-        self.preprocessors = [grid_oracle, MetaObs()]
+        meta_obs = MetaObs( **kwargs.pop("meta_obs", {}) )
+
+        self.preprocessors = [grid_oracle, meta_obs]
 
         clf_args = kwargs.pop("object_classifier", None)
         if clf_args:
