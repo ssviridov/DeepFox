@@ -172,7 +172,7 @@ def main():
     device = torch.device(device_str)
 
     #Load config files and determine a method of config sampling:
-    gen_config = configs.HierarchicalSampler.create_from_dir(args.config_dir)
+    gen_config = configs.Curriculum.create_from_dir(args.config_dir)
 
     gen_config = configs.RandomizedGenerator.create(
         gen_config, args.rnd_blackout, args.rnd_object, args.rnd_color

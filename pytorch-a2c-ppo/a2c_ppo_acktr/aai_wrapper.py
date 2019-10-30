@@ -180,6 +180,7 @@ class AnimalAIWrapper(gym.Env):
 
     def _make_info(self, obs, r, done):
         if done:
+            self.ep_success = r > 0.4
             return {
                 "episode_reward": float(self.ep_reward),
                 'episode_success': r > 0.4,
@@ -198,15 +199,19 @@ class AnimalAIWrapper(gym.Env):
         self.angle = np.zeros((1,), dtype=np.float32)
         self.pos = np.zeros((3,), dtype=np.float32)
 
+        if forced_config:
+            self._set_config(forced_config)
+        else:
+            if self.num_episode == 1:
+                self._set_config(self.config_generator.next_config())
+            else:
+                self._set_config(self.config_generator.next_config(self.config_name, self.ep_success))
+
         self.ep_reward = 0.
         self.ep_success = False
         if self.scale_reward:
             self.scaled_ep_reward = 0.
 
-        if forced_config:
-            self._set_config(forced_config)
-        else:
-            self._set_config(self.config_generator.next_config())
 
         obs, r, done = self.process_state(self.env.reset(arenas_configurations=self.config))
         while done:
