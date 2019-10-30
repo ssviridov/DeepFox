@@ -326,7 +326,7 @@ class Curriculum(ConfigGenerator):
         probs = np.array([0.7 * (0.2 ** abs(i)) for i in range(len(probs))])
         self._probs = probs/sum(probs)
         assert sum(self._probs) == 1, "probabilities must sum to 1"
-        self._current_level_name = self._folders[0]
+        self._current_level_index = 0
         self._threshold = threshold
         self._que_size = que_size
         self.queues = [deque(maxlen=que_size)] * len(self._folders)
@@ -342,12 +342,17 @@ class Curriculum(ConfigGenerator):
             successes = self.queues[self._folders.index(config_name)]
             if len(successes) >= self._que_size:
                 if np.mean(successes) > self._threshold:
-                    self._current_level_name = self._current_level_name[:-2] + str(int(self._current_level_name[-2]) + 1) + "/"
+                    if self._current_level_index == len(self._folders) - 1:
+                        pass
+                    else:
+                        self._current_level_index = self._current_level_index + 1
                 else:
-                    self._current_level_name = self._current_level_name[:-2] + str(int(self._current_level_name[-2]) - 1) + "/"
-                ind = self._folders.index(self._current_level_name)
-                self._probs[ind] = 0.7
-                new_probs = np.array([0.7*(0.2**abs(i-ind)) for i in range(len(self._probs))])
+                    if self._current_level_index == 0:
+                        pass
+                    else:
+                        self._current_level_index = self._current_level_index - 1
+                self._probs[self._current_level_index] = 0.7
+                new_probs = np.array([0.7*(0.2**abs(i-self._current_level_index)) for i in range(len(self._probs))])
                 self._probs = new_probs/sum(new_probs)
                 assert sum(self._probs) == 1, "probabilities must sum to 1"
         print(self._folders)
