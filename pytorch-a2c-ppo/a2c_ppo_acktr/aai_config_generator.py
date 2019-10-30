@@ -95,7 +95,7 @@ class ListSampler(ConfigGenerator):
         np.random.shuffle(combined)
         self.configs, self.config_names = zip(*combined)
 
-    def next_config(self):
+    def next_config(self, *args, **kwargs):
         config = self.configs[self.next_id]
         name = self.config_names[self.next_id]
         self.next_id = (self.next_id + 1) % len(self.configs)
@@ -160,10 +160,6 @@ class HierarchicalSampler(ConfigGenerator):
             return self.recursive_choice(choice, name=name)
         else:
             return {'config':choice, "config_name":name}
-
-
-class SimpleCurriculum(ConfigGenerator):
-    pass
 
 
 def deep_config_update(target, source):

@@ -663,11 +663,11 @@ def handle_commandline():
         help='Episode duration [default: 500]'
     )
     parser.add_argument(
-        '-nr', '--num-ramps', type=int, default=2,
+        '-nr', '--num-ramps', type=int, default=0,
         help="Desired number of ramps in a maze [default: 2]"
     )
     parser.add_argument(
-        '-rg', '--random-goals', type=int, default=2,
+        '-rg', '--random-goals', type=int, default=0,
         help="Number of randomly placed goals in a maze, if n > 1 then we use gold goals, [default: 2]"
     )
     parser.add_argument(
@@ -679,11 +679,11 @@ def handle_commandline():
         help="Desired number of death zones instead of walls [default: ignored]"
     )
     parser.add_argument(
-        '--color-prob', type=float, default=0.15,
+        '--color-prob', type=float, default=0.0,
         help="Probability of random color in  for walls and tunnels [default: 0.15]"
     )
     parser.add_argument(
-        '--transparent-prob', type=float, default=0.15,
+        '--transparent-prob', type=float, default=0.0,
         help="Chance to generate a transparent object(walls and tunnels) [default: 0.15]"
     )
     parser.add_argument(
@@ -730,8 +730,9 @@ def handle_commandline():
     else:
         args.mode = 'full'
 
-    assert len(args.fixed_goals)%2 == 0,"--finish receives coordinates of targets, there should be an even number of coordiantes"
     if args.fixed_goals:
+        assert len(args.fixed_goals) % 2 == 0, \
+            "--finish receives coordinates of targets, there should be an even number of coordiantes"
         args.fixed_goals = [(args.fixed_goals[i], args.fixed_goals[i+1])
                             for i in range(0, len(args.fixed_goals), 2)]
     else:
