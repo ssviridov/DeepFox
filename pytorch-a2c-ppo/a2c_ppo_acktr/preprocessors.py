@@ -278,7 +278,7 @@ class GridOracleWithAngles(Preprocessor):
         self.cell_side = cell_side
         self.angle_box = self.ANGLE_RANGE/num_angles
         self.curr_step = 0
-        self.oracle_r_final = np.abs(oracle_reward_final)
+        self.oracle_r_final = np.abs(oracle_reward_final) if oracle_reward_final else None
 
         if self.oracle_r_final is not None:
             assert total_steps is not None
