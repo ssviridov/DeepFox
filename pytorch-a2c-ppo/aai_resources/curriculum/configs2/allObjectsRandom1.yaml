@@ -1,0 +1,41 @@
+!ArenaConfig
+arenas:
+  0: !Arena
+    t: 1000
+    items:
+    - !Item
+      name: Cardbox1
+    - !Item
+      name: Cardbox2
+    - !Item
+      name: Cylinder
+    - !Item
+      name: UObject
+    - !Item
+      name: LObject
+    - !Item
+      name: GoodGoal
+    - !Item
+      name: GoodGoalBounce
+    - !Item
+      name: CylinderTunnel
+    - !Item
+      name: Ramp
+    - !Item
+      name: Wall
+    - !Item
+      name: WallTransparent
+    - !Item
+      name: BadGoal
+    - !Item
+      name: BadGoalBounce
+    - !Item
+      name: GoodGoalMulti
+    - !Item
+      name: GoodGoalMultiBounce
+    - !Item
+      name: DeathZone
+      sizes:
+        - !Vector3 {x: 10, y: 1, z: 10}
+    - !Item
+      name: HotZone
