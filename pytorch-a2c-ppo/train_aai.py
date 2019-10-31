@@ -152,6 +152,37 @@ def make_model_kwargs(args):
     )
     return model_kwargs
 
+MAZE_CONFIG_DIR='aai_resources/asorokin/mazes/'
+MAZES_TYPES = ['closed', 'full', 'obstacle-course', 'open']
+def make_config_generator(
+        config_dir,
+        maze_prob,
+        maze_config_dir=MAZE_CONFIG_DIR,
+        **curriculun_kwargs
+):
+    default_gen = configs.HierarchicalSampler.create_from_dir(config_dir)
+
+    if maze_prob <= 0.0:
+        return default_gen
+
+    generators = []
+    probs = []
+    default_prob = 1. - maze_prob
+    maze_prob = maze_prob/len(MAZES_TYPES)
+
+    generators.append(default_gen)
+    probs.append(default_prob)
+
+    maze_dirs = [os.path.join(maze_config_dir, mt) for mt in MAZES_TYPES]
+
+    for maze_dir in maze_dirs:
+        maze_gen = configs.Curriculum.create_from_dir(maze_dir, **curriculun_kwargs)
+        generators.append(maze_gen)
+        probs.append(maze_prob)
+
+    merged_gen = configs.ConfigMerger(generators, probs)
+    return merged_gen
+
 def main():
     args = get_args()
     if args.seed is None:
@@ -171,8 +202,9 @@ def main():
     device_str = "cuda:{}".format(args.device) if args.cuda else "cpu"
     device = torch.device(device_str)
 
+    # gen_config = configs.Curriculum.create_from_dir(args.config_dir, update_period=25)
     #Load config files and determine a method of config sampling:
-    gen_config = configs.Curriculum.create_from_dir(args.config_dir)
+    gen_config = make_config_generator(args.config_dir, args.mazes_prob, min_update_period=100)
 
     gen_config = configs.RandomizedGenerator.create(
         gen_config, args.rnd_blackout, args.rnd_object, args.rnd_color

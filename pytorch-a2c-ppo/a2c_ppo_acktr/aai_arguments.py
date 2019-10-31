@@ -35,6 +35,10 @@ def get_args():
         help='Path to a directory with AnimalAI default_configs')
 
     parser.add_argument(
+        '--mazes-prob', type=float, default=0.0,
+        help='probability of sampling curriculum based maze configs along with configs from --config-dir'
+    )
+    parser.add_argument(
         '-hl', '--headless',
         action='store_true',
         default=False,
