@@ -299,7 +299,7 @@ class ConfigMerger(ConfigGenerator):
     """
 
     def __init__(self, config_generators, probs):
-        assert sum(probs) == 1, "Probabilities must sum to 1"
+        assert sum(probs) == 1., "Probabilities must sum to 1"
         self.config_generators = config_generators
         self.probs = probs
         self.prev_chosen_gen = None
@@ -339,7 +339,7 @@ class Curriculum(ConfigGenerator):
             folders2configs,
             thresholds=(0.3, 0.6),
             min_update_period=100,
-            history_len=70,
+            history_len=None, # if None then min_update_period is used
     ):
         self._configs = folders2configs
         self._folders = sorted(list(folders2configs.keys()))
