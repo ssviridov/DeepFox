@@ -170,8 +170,9 @@ def make_config_generator(
     default_prob = 1. - maze_prob
     maze_prob = maze_prob/len(MAZES_TYPES)
 
-    generators.append(default_gen)
-    probs.append(default_prob)
+    if default_prob > 0.:
+        generators.append(default_gen)
+        probs.append(default_prob)
 
     maze_dirs = [os.path.join(maze_config_dir, mt) for mt in MAZES_TYPES]
 
@@ -204,7 +205,10 @@ def main():
 
     # gen_config = configs.Curriculum.create_from_dir(args.config_dir, update_period=25)
     #Load config files and determine a method of config sampling:
-    gen_config = make_config_generator(args.config_dir, args.mazes_prob, min_update_period=100)
+    gen_config = make_config_generator(
+        args.config_dir, args.mazes_prob,
+        thresholds=(0.25, 0.6), min_update_period=50, history_len=70,
+    )
 
     gen_config = configs.RandomizedGenerator.create(
         gen_config, args.rnd_blackout, args.rnd_object, args.rnd_color

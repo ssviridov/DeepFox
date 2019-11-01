@@ -66,14 +66,6 @@ class AnimalAIWrapper(gym.Env):
         lookup = self.create_actions(action_mode)
         self.action_map = lambda a: lookup[a]
 
-        #lookup_func = lambda a:{'Learner':np.array([a], dtype=float)}
-        #if action_mode:
-        #    lookup = itertools.product([0, 1], [0, 1, 2])
-        #else:
-        #    lookup = itertools.product([0, 1, 2], repeat=2)
-        #lookup = dict(enumerate(map(lookup_func, lookup)))
-
-        
         self.observation_space = self._make_obs_space()
         self.action_space = Discrete(len(lookup))
         self.action_repeat = action_repeat
@@ -82,7 +74,8 @@ class AnimalAIWrapper(gym.Env):
 
         self.pos = np.zeros((3,), dtype=np.float32)
         self.angle = np.zeros((1,), dtype=np.float32)
-
+        self.config_name = None
+        self.ep_success = None
         #print("Time limit: ", self.time_limit)
 
     def create_actions(self, action_set_mode=None):
@@ -202,10 +195,9 @@ class AnimalAIWrapper(gym.Env):
         if forced_config:
             self._set_config(forced_config)
         else:
-            if self.num_episode == 1:
-                self._set_config(self.config_generator.next_config())
-            else:
-                self._set_config(self.config_generator.next_config(self.config_name, self.ep_success))
+            self._set_config(self.config_generator.next_config(
+                config_results=dict(name=self.config_name, success=self.ep_success)
+            ))
 
         self.ep_reward = 0.
         self.ep_success = False

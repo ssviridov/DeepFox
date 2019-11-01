@@ -21,6 +21,13 @@ class ConfigGenerator(object):
     def shuffle(self):
         raise NotImplementedError()
 
+    def process_results(self, *args, **kwargs):
+        """
+        a method to process info about agent's results on a previous config.
+        For example to decide what config to choose next
+        """
+        pass
+
 class SingleConfigGenerator(ConfigGenerator):
     """
     Always returns same config. If config wasn't provided, always returns None
@@ -295,73 +302,24 @@ class ConfigMerger(ConfigGenerator):
         assert sum(probs) == 1, "Probabilities must sum to 1"
         self.config_generators = config_generators
         self.probs = probs
+        self.prev_chosen_gen = None
 
     def next_config(self, *args, **kwargs):
-        gen = np.random.choice(self.config_generators, p=self.probs)
-        return gen.next_config(*args, **kwargs)
+        if self.prev_chosen_gen:
+            self.prev_chosen_gen.process_results(kwargs.pop('config_results'))
+
+        chosen_gen = np.random.choice(self.config_generators, p=self.probs)
+        self.prev_chosen_gen = chosen_gen
+        return chosen_gen.next_config(*args, **kwargs)
 
     def shuffle(self):
-        pass
+        for cg in self.config_generators:
+            cg.shuffle()
 
-
-class CurriculumOld(ConfigGenerator):
-    @classmethod
-    def create_from_dir(cls, config_dir):
-        dir_dict = defaultdict(dict)
-        dirs = glob(config_dir+'/*/')
-        for name in dirs:
-            config_files = [f for f in pathlib.Path(name).glob("**/*.yaml")]
-            file_dict = dict()
-            for file in config_files:
-                config = ArenaConfig(file)
-                file_dict[file] = config
-            dir_dict[name] = file_dict
-        return cls(dir_dict)
-
-    def __init__(self, folders2configs, threshold=0.5, que_size=100):
-        self._configs = folders2configs
-        self._folders = sorted(list(folders2configs.keys()))
-        probs = [0.7 if fnmatch.fnmatch(key, "Level_1") else 0 for key in self._folders]
-        probs = np.array([0.7 * (0.2 ** abs(i)) for i in range(len(probs))])
-        self._probs = probs/sum(probs)
-        self._current_level_index = 0
-        self._threshold = threshold
-        self._que_size = que_size
-        self.queues = [deque(maxlen=que_size) for _ in range(len(self._folders))]
-        self.n_episodes = 0
-
-    def shuffle(self):
-        pass
-
-    def next_config(self, config_name=None, success=0):
-        if self.n_episodes % 100 == 0:
-            print("n_episodes:", self.n_episodes, 'probs:', np.round(self._probs, 3))
-
-        if config_name in self._folders:
-            self.queues[self._folders.index(config_name)].append(success)
-            successes = self.queues[self._folders.index(config_name)]
-            if len(successes) >= self._que_size:
-                if np.mean(successes) > self._threshold:
-                    if self._current_level_index == len(self._folders) - 1:
-                        pass
-                    else:
-                        self._current_level_index = self._current_level_index + 1
-                else:
-                    if self._current_level_index == 0:
-                        pass
-                    else:
-                        self._current_level_index = self._current_level_index - 1
-                self._probs[self._current_level_index] = 0.7
-                new_probs = np.array([0.7*(0.2**abs(i-self._current_level_index)) for i in range(len(self._probs))])
-                self._probs = new_probs/sum(new_probs)
-
-        folder = np.random.choice(self._folders, p=self._probs)
-        config = np.random.choice(list(self._configs[folder].keys()))
-        self.n_episodes += 1
-        return {'config':self._configs[folder][config], "config_name":folder}
 
 
 class Curriculum(ConfigGenerator):
+
     @classmethod
     def create_from_dir(cls, config_dir, **kwargs):
         dir_dict = defaultdict(dict)
@@ -376,10 +334,18 @@ class Curriculum(ConfigGenerator):
 
         return cls(dir_dict, **kwargs)
 
-    def __init__(self, folders2configs, thresholds=(0.30, 0.60), min_update_period=100):
+    def __init__(
+            self,
+            folders2configs,
+            thresholds=(0.3, 0.6),
+            min_update_period=100,
+            history_len=None,
+    ):
         self._configs = folders2configs
         self._folders = sorted(list(folders2configs.keys()))
-        print("levels:\n", self._folders)
+        self.name = os.path.basename(os.path.commonpath(self._folders))
+        print('Curriculum on', self.name)
+
         self._level = 0
         self._probs = [0.] * len(self._folders)
         self._update_probs(0.)
@@ -388,38 +354,55 @@ class Curriculum(ConfigGenerator):
         self.upper_threshold = thresholds[1]
 
         self.min_update_period = min_update_period
-        self.successes = deque(maxlen=self.min_update_period)
+        # history >= min_update_period:
+        self.history_len = max(history_len if history_len else 0, min_update_period)
+        self.successes = deque(maxlen=max(min_update_period,history_len))
         self.n_episodes = 0
+        self.prev_config = None
 
     def shuffle(self):
         pass
 
-    def next_config(self, config_name=None, success=0):
+    def process_results(self, config_results):
+        if config_results['name'] != self.prev_config:
+            raise ValueError("Generator expects results from config it generated previously")
 
-        if config_name in self._folders:
-            self.successes.append(success)
+        self.successes.append(config_results['success'])
+        #print("n-ep:", self.n_episodes, 'success:', len(self.successes),"lvl:", self._folders[self._level] )
 
-            if len(self.successes) >= self.min_update_period:
-                quality = np.mean(self.successes)
+        if len(self.successes) >= self.min_update_period:
+            quality = np.mean(self.successes)
+            new_level = self._level
 
+            if quality >= self.upper_threshold:
+                new_level = min(self._level+1, len(self._folders)-1)
+                #print('!LEVEL UP! to {}-level-{}'.format(self.name, new_level+1))
 
-                if quality >= self.upper_threshold:
-                    self._level = min(self._level+1, len(self._folders)-1)
-                    self.successes.clear()
+            elif quality < self.lower_threshold:
+                new_level = max(self._level-1, 0)
+                #print('LEVEL DOWN to {}-level-{}'.format(self.name, new_level+1))
 
-                elif quality < self.lower_threshold:
-
-                    self._level = max(self._level-1, 0)
-                    self.successes.clear()
-
+            if new_level != self._level:
+                self._level = new_level
                 self._update_probs(quality)
-                if self.n_episodes % 100 == 0:
-                    print("N_ep:", self.n_episodes, 'level:', self._folders[self._level], 'success:', quality)
+                self.successes.clear()
 
-        folder = np.random.choice(self._folders, p=self._probs)
-        config = np.random.choice(list(self._configs[folder].keys()))
+        if self.n_episodes % 50 == 0:
+            quality = np.mean(self.successes) if self.successes else quality
+            print("{}-level-{}".format(
+                self.name, self._level+1),
+                "N[e]:", self.n_episodes,
+                "N[s]:", len(self.successes),
+                'quality:', quality
+            )
+
+    def next_config(self, *args, **kwargs):
+        level_folder = np.random.choice(self._folders, p=self._probs)
+        cfg_name = np.random.choice(list(self._configs[level_folder].keys()))
+        self.prev_config = os.path.dirname(cfg_name)
         self.n_episodes += 1
-        return {'config':self._configs[folder][config], "config_name":folder}
+        return {'config':self._configs[level_folder][cfg_name], "config_name":self.prev_config}
+
 
     def _update_probs(self, quality):
         self._probs[self._level] = 0.7
