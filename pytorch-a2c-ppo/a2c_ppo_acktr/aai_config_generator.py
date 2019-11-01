@@ -339,7 +339,7 @@ class Curriculum(ConfigGenerator):
             folders2configs,
             thresholds=(0.3, 0.6),
             min_update_period=100,
-            history_len=None,
+            history_len=70,
     ):
         self._configs = folders2configs
         self._folders = sorted(list(folders2configs.keys()))
