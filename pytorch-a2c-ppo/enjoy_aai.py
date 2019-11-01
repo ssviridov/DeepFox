@@ -23,9 +23,15 @@ def load_args(folder, file_name='train_args.json'):
     else:
         return None
 
+USE_DIR_NAME = False
+
 def get_config_name(venv_aai):
+
     name = env.venv.envs[0].unwrapped.config_name[:-5]#no .yaml suffix
-    name = name.rstrip(string.digits)
+    if USE_DIR_NAME:
+        name = os.path.dirname(name)
+    else:
+        name = name.rstrip(string.digits)
     return name
 
 parser = argparse.ArgumentParser(description='RL')

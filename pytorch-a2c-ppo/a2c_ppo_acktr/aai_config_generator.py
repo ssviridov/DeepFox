@@ -403,7 +403,6 @@ class Curriculum(ConfigGenerator):
         self.n_episodes += 1
         return {'config':self._configs[level_folder][cfg_name], "config_name":self.prev_config}
 
-
     def _update_probs(self, quality):
         self._probs[self._level] = 0.7
         new_probs = np.array([0.7 * (0.2 ** abs(i - self._level)) for i in range(len(self._probs))])
